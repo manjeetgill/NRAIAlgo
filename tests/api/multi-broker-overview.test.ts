@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { OVERVIEW_SNAPSHOT_FIXTURES } from "../fixtures/overview";
-import { buildOverviewSnapshot, type SnapshotDeps } from '../../apps/api/src/build-overview-snapshot.js';
+import { buildOverviewSnapshot, type SnapshotDeps } from '../../backend/nodejs/src/build-overview-snapshot.js';
 
 describe('multi-broker dashboard composition',()=>{
  it('starts both broker reads before either completes',async()=>{

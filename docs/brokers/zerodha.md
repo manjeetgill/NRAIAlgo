@@ -67,14 +67,14 @@ The current implementation bounds feeds to 32 workspaces and three workers per A
 
 | File | Responsibility |
 | --- | --- |
-| `apps/api/src/broker-auth/zerodha.ts` | Login URL, token exchange, session schema and expiry |
-| `apps/api/src/broker-auth/zerodha-portfolio.ts` | Holdings, margins, positions and P&L baseline |
-| `apps/api/src/broker-auth/zerodha-orders.ts` | Recent order-book panel |
-| `apps/api/src/market-data/kite-feed.ts` | SDK worker, subscriptions and events |
-| `apps/api/src/market-data/live-overview.ts` | Cached ticks, freshness and valuation overlay |
-| `apps/api/src/routes/overview.ts` | Authenticated snapshot cache and refresh coordination |
-| `apps/api/src/build-overview-snapshot.ts` | Combines broker account reads and closing references |
-| `apps/web/app/app/overview/use-overview-snapshot.ts` | Browser polling and stale-response handling |
+| `backend/nodejs/src/broker-auth/zerodha.ts` | Login URL, token exchange, session schema and expiry |
+| `backend/nodejs/src/broker-auth/zerodha-portfolio.ts` | Holdings, margins, positions and P&L baseline |
+| `backend/nodejs/src/broker-auth/zerodha-orders.ts` | Recent order-book panel |
+| `backend/nodejs/src/market-data/kite-feed.ts` | SDK worker, subscriptions and events |
+| `backend/nodejs/src/market-data/live-overview.ts` | Cached ticks, freshness and valuation overlay |
+| `backend/nodejs/src/routes/overview.ts` | Authenticated snapshot cache and refresh coordination |
+| `backend/nodejs/src/build-overview-snapshot.ts` | Combines broker account reads and closing references |
+| `frontend/nextjs/app/app/overview/use-overview-snapshot.ts` | Browser polling and stale-response handling |
 
 ## Not implemented by this integration
 

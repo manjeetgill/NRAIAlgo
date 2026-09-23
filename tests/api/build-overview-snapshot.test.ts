@@ -1,10 +1,10 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { buildOverviewSnapshot, loadOverviewInputs, type SnapshotDeps } from "../../apps/api/src/build-overview-snapshot.js";
-import { openDatabaseStore, runDatabaseMigrations, type Store } from "../../apps/api/src/database.js";
-import { seedNseCalendar } from "../../apps/api/src/market-calendar.js";
-import { credentialVault } from "../../apps/api/src/credential-vault.js";
+import { buildOverviewSnapshot, loadOverviewInputs, type SnapshotDeps } from "../../backend/nodejs/src/build-overview-snapshot.js";
+import { openDatabaseStore, runDatabaseMigrations, type Store } from "../../backend/nodejs/src/database/database.js";
+import { seedNseCalendar } from "../../backend/nodejs/src/market-calendar.js";
+import { credentialVault } from "../../backend/nodejs/src/credential-vault.js";
 import type { PriceQuote } from "@nraialgo/contracts";
-import { recordSessionGrossPnl } from "../../apps/api/src/session-performance.js";
+import { recordSessionGrossPnl } from "../../backend/nodejs/src/session-performance.js";
 
 const vault = credentialVault({ CREDENTIAL_VAULT_KEY: "e".repeat(64) } as NodeJS.ProcessEnv);
 const EXCHANGE = "OVR_TEST";

@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { StatusBadge } from "../../../../apps/web/app/components/status-badge/status-badge";
+import { StatusBadge } from "../../../../frontend/nextjs/app/components/status-badge/status-badge";
 
 describe("StatusBadge", () => {
   it("renders the given label", () => {

@@ -3,19 +3,19 @@ import sensible from '@fastify/sensible';
 import {afterEach,beforeEach,describe,expect,it,vi} from 'vitest';
 import { OVERVIEW_SNAPSHOT_FIXTURES } from "../../fixtures/overview";
 import { type OverviewSnapshot } from "@nraialgo/contracts";
-import type {Store} from '../../../apps/api/src/database.js';
-import type {credentialVault} from '../../../apps/api/src/credential-vault.js';
-import {buildOverviewSnapshot,loadOverviewInputs} from '../../../apps/api/src/build-overview-snapshot.js';
-import {isFullyReconciledForPerformance,overviewRoutes} from '../../../apps/api/src/routes/overview.js';
+import type {Store} from '../../../backend/nodejs/src/database/database.js';
+import type {credentialVault} from '../../../backend/nodejs/src/credential-vault.js';
+import {buildOverviewSnapshot,loadOverviewInputs} from '../../../backend/nodejs/src/build-overview-snapshot.js';
+import {isFullyReconciledForPerformance,overviewRoutes} from '../../../backend/nodejs/src/routes/overview.js';
 
 const managers=vi.hoisted(()=>{
   const manager=()=>({ensure:vi.fn(),needsReconciliation:vi.fn(()=>false),reconciliationVersion:vi.fn(()=>7),reconciled:vi.fn(),overlay:vi.fn((value:unknown)=>value),prune:vi.fn(),close:vi.fn()});
   return {zerodha:manager(),kotak:manager()};
 });
-vi.mock('../../../apps/api/src/market-data/live-overview.js',()=>({LiveOverview:class{constructor(){return managers.zerodha;}}}));
-vi.mock('../../../apps/api/src/market-data/kotak-live-overview.js',()=>({KotakLiveOverview:class{constructor(){return managers.kotak;}}}));
-vi.mock('../../../apps/api/src/build-overview-snapshot.js',()=>({buildOverviewSnapshot:vi.fn(),loadOverviewInputs:vi.fn()}));
-vi.mock('../../../apps/api/src/routes/auth.js',()=>({requireAuth:()=>async(request:{auth?:unknown})=>{request.auth={workspaceId:'review-workspace',accountId:'A',email:'test@example.invalid'};}}));
+vi.mock('../../../backend/nodejs/src/market-data/live-overview.js',()=>({LiveOverview:class{constructor(){return managers.zerodha;}}}));
+vi.mock('../../../backend/nodejs/src/market-data/kotak-live-overview.js',()=>({KotakLiveOverview:class{constructor(){return managers.kotak;}}}));
+vi.mock('../../../backend/nodejs/src/build-overview-snapshot.js',()=>({buildOverviewSnapshot:vi.fn(),loadOverviewInputs:vi.fn()}));
+vi.mock('../../../backend/nodejs/src/routes/auth.js',()=>({requireAuth:()=>async(request:{auth?:unknown})=>{request.auth={workspaceId:'review-workspace',accountId:'A',email:'test@example.invalid'};}}));
 
 let app:FastifyInstance;
 const base=():OverviewSnapshot=>({...structuredClone(OVERVIEW_SNAPSHOT_FIXTURES['market-open']),generatedAt:new Date().toISOString()});

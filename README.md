@@ -8,13 +8,25 @@ and explicit data coverage. Order execution is not implemented.
 
 | Directory | Responsibility |
 | --- | --- |
-| `apps/api` | Fastify API, authentication, PostgreSQL, broker adapters and streams |
-| `apps/web` | Next.js dashboard and account screens |
-| `apps/contracts` | Shared API schemas and market-state types |
-| `services/kotak-sdk` | Private Python SDK subprocess bridge |
+| `backend/nodejs` | Node.js/Fastify API, authentication, broker adapters and streams |
+| `backend/nodejs/src/database` | PostgreSQL adapter, schema/migrations, local setup and calendar import |
+| `frontend/nextjs` | Next.js dashboard and account screens |
+| `shared/typescript` | Shared API schemas and market-state types |
+| `backend/python/kotak-sdk` | Private Python SDK subprocess bridge |
 | `tests` | All automated tests, fixtures, setup and test runner |
 | `docs` | Broker, dashboard, deployment and review documentation |
 | `deploy` | Deployment configuration and operational scripts |
+
+Next.js `.tsx`, `.ts`, and CSS files stay together inside `frontend/nextjs` so
+routes, component imports, and framework conventions remain intact. Shared
+TypeScript schemas live in `shared/typescript`; they are not frontend pages.
+PostgreSQL code stays in the API's dedicated database folder so the API builds as
+one deployable unit. Database data and credentials remain in the ignored root
+`.runtime/` directory and are never moved into source control.
+
+Root manifests, the lockfile, Dockerfile, and TypeScript base config coordinate
+the workspaces. Run commands from the repository root; workspace package names
+(`@nraialgo/api`, `@nraialgo/web`, `@nraialgo/contracts`) are unchanged.
 
 ## Requirements
 

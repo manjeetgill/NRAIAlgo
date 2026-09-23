@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { buildServer } from "../../../apps/api/src/server.js";
-import { openDatabaseStore, runDatabaseMigrations, type Store } from "../../../apps/api/src/database.js";
-import { hashPassword, verifyPassword, setUserPassword, createSession, resolveSession } from "../../../apps/api/src/auth.js";
-import type { Query } from "../../../apps/api/src/database.js";
+import { buildServer } from "../../../backend/nodejs/src/server.js";
+import { openDatabaseStore, runDatabaseMigrations, type Store } from "../../../backend/nodejs/src/database/database.js";
+import { hashPassword, verifyPassword, setUserPassword, createSession, resolveSession } from "../../../backend/nodejs/src/auth.js";
+import type { Query } from "../../../backend/nodejs/src/database/database.js";
 
 let store: Store;
 

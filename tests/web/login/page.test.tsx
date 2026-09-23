@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import LoginPage from "../../../apps/web/app/login/page";
+import LoginPage from "../../../frontend/nextjs/app/login/page";
 
 const mockRouterReplace = vi.fn();
 vi.mock("next/navigation", () => ({

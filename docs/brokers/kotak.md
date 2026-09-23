@@ -91,17 +91,17 @@ App credentials and saved broker sessions use the server credential vault with A
 
 | File | Responsibility |
 | --- | --- |
-| `services/kotak-sdk/bridge.py` | Official SDK login, account reads, session restoration and decoded streams |
-| `services/kotak-sdk/requirements.txt` | Pinned official SDK dependency |
-| `apps/api/src/broker-auth/kotak-sdk.ts` | Private child-process protocol, deadline and schema validation |
-| `apps/api/src/broker-auth/kotak.ts` | SDK login delegation, session schema and expiry cap |
-| `apps/api/src/broker-auth/kotak-portfolio.ts` | SDK account reads, response normalization and margin/P&L calculations |
-| `apps/api/src/market-data/kotak-feed.ts` | SDK child lifecycle, validated events and subscriptions |
-| `apps/api/src/market-data/kotak-live-overview.ts` | Workspace isolation, reconciliation barrier and tick valuation |
-| `apps/api/src/routes/broker-auth.ts` | Authenticated login endpoints and session persistence |
-| `apps/api/src/routes/overview.ts` | Account cache and both broker overlays |
-| `apps/api/src/build-overview-snapshot.ts` | Combines broker data and provider failure handling |
-| `apps/web/app/app/overview/market-open-screen.tsx` | Positions, margin cards and stream-status presentation |
+| `backend/python/kotak-sdk/bridge.py` | Official SDK login, account reads, session restoration and decoded streams |
+| `backend/python/kotak-sdk/requirements.txt` | Pinned official SDK dependency |
+| `backend/nodejs/src/broker-auth/kotak-sdk.ts` | Private child-process protocol, deadline and schema validation |
+| `backend/nodejs/src/broker-auth/kotak.ts` | SDK login delegation, session schema and expiry cap |
+| `backend/nodejs/src/broker-auth/kotak-portfolio.ts` | SDK account reads, response normalization and margin/P&L calculations |
+| `backend/nodejs/src/market-data/kotak-feed.ts` | SDK child lifecycle, validated events and subscriptions |
+| `backend/nodejs/src/market-data/kotak-live-overview.ts` | Workspace isolation, reconciliation barrier and tick valuation |
+| `backend/nodejs/src/routes/broker-auth.ts` | Authenticated login endpoints and session persistence |
+| `backend/nodejs/src/routes/overview.ts` | Account cache and both broker overlays |
+| `backend/nodejs/src/build-overview-snapshot.ts` | Combines broker data and provider failure handling |
+| `frontend/nextjs/app/app/overview/market-open-screen.tsx` | Positions, margin cards and stream-status presentation |
 
 ## Not implemented by this integration
 

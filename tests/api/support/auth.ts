@@ -3,8 +3,8 @@
  * workspaceId that session resolves to (= the user's id) -- every protected
  * route test needs this instead of a bare workspaceId query parameter now. */
 import type { FastifyInstance } from "fastify";
-import type { Store } from "../../../apps/api/src/database.js";
-import { hashPassword } from "../../../apps/api/src/auth.js";
+import type { Store } from "../../../backend/nodejs/src/database/database.js";
+import { hashPassword } from "../../../backend/nodejs/src/auth.js";
 
 const TEST_PASSWORD = "correct horse battery staple 42";
 

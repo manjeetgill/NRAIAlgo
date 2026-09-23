@@ -1,6 +1,6 @@
 import AdmZip from "adm-zip";
 import { describe, expect, it } from "vitest";
-import { instrumentLookupKey, parseIciciTick, parseSecurityMaster } from "../../../apps/api/src/market-data/icici-feed.js";
+import { instrumentLookupKey, parseIciciTick, parseSecurityMaster } from "../../../backend/nodejs/src/market-data/icici-feed.js";
 
 describe("ICICI live feed protocol", () => {
   it("maps official security-master equity and derivative contracts to quote tokens", () => {

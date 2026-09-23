@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { buildServer } from "../../../apps/api/src/server.js";
-import { openDatabaseStore, runDatabaseMigrations, type Store } from "../../../apps/api/src/database.js";
-import { credentialVault } from "../../../apps/api/src/credential-vault.js";
-import { KotakLoginError } from "../../../apps/api/src/broker-auth/kotak.js";
+import { buildServer } from "../../../backend/nodejs/src/server.js";
+import { openDatabaseStore, runDatabaseMigrations, type Store } from "../../../backend/nodejs/src/database/database.js";
+import { credentialVault } from "../../../backend/nodejs/src/credential-vault.js";
+import { KotakLoginError } from "../../../backend/nodejs/src/broker-auth/kotak.js";
 import { loginTestUser } from "../support/auth.js";
 
 const vault = credentialVault({ CREDENTIAL_VAULT_KEY: "d".repeat(64) } as NodeJS.ProcessEnv);

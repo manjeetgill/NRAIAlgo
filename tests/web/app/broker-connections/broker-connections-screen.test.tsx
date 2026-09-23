@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { BrokerConnectionsScreen } from "../../../../apps/web/app/app/broker-connections/broker-connections-screen";
+import { BrokerConnectionsScreen } from "../../../../frontend/nextjs/app/app/broker-connections/broker-connections-screen";
 import { ToastProvider } from "@/app/components/toast/toast";
 
 type Status = { zerodha: string | null; kotak: string | null };
@@ -40,8 +40,8 @@ function renderScreen() {
   );
 }
 
-vi.mock("../../../../apps/web/app/app/overview/use-overview-snapshot", () => ({useOverviewSnapshot: () => ({snapshot:null,stale:false,refresh:vi.fn()})}));
-vi.mock("../../../../apps/web/app/app/overview/use-icici-account", () => ({useIciciAccount: () => ({account:null,stale:false,refresh:vi.fn()})}));
+vi.mock("../../../../frontend/nextjs/app/app/overview/use-overview-snapshot", () => ({useOverviewSnapshot: () => ({snapshot:null,stale:false,refresh:vi.fn()})}));
+vi.mock("../../../../frontend/nextjs/app/app/overview/use-icici-account", () => ({useIciciAccount: () => ({account:null,stale:false,refresh:vi.fn()})}));
 
 describe("BrokerConnectionsScreen", () => {
   afterEach(() => {

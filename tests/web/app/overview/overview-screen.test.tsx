@@ -2,7 +2,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { OVERVIEW_SNAPSHOT_FIXTURES } from "../../../fixtures/overview";
 import { type OverviewSnapshot } from "@nraialgo/contracts";
-import { OverviewScreen } from "../../../../apps/web/app/app/overview/overview-screen";
+import { OverviewScreen } from "../../../../frontend/nextjs/app/app/overview/overview-screen";
 
 // This is the shared Overview contract in practice: no hook, no switcher, no
 // time dependency -- just a snapshot passed straight in as a prop. Any

@@ -60,7 +60,7 @@ services:
     build: { context: ../.., target: web }
     init: true
     read_only: true
-    tmpfs: [/tmp, /app/apps/web/.next/cache]
+    tmpfs: [/tmp, /app/frontend/nextjs/.next/cache]
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     restart: unless-stopped
@@ -89,7 +89,7 @@ services:
   migrate:
     profiles: [tools]
     image: nraialgo-api:f78936c-private
-    command: [node, apps/api/dist/migrate.js]
+    command: [node, backend/nodejs/dist/database/migrate.js]
     environment:
       NODE_ENV: production
       DATABASE_ADMIN_URL_FILE: /run/secrets/database_admin_url

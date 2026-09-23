@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { OVERVIEW_SNAPSHOT_FIXTURES } from "../../fixtures/overview";
 import { OverviewSnapshotSchema, type OverviewSnapshot } from "@nraialgo/contracts";
-import { LiveOverview } from "../../../apps/api/src/market-data/live-overview.js";
-import type { FeedFactory, FeedMessage } from "../../../apps/api/src/market-data/kite-feed.js";
-import { KotakLiveOverview } from "../../../apps/api/src/market-data/kotak-live-overview.js";
-import type { KotakMessage } from "../../../apps/api/src/market-data/kotak-feed.js";
+import { LiveOverview } from "../../../backend/nodejs/src/market-data/live-overview.js";
+import type { FeedFactory, FeedMessage } from "../../../backend/nodejs/src/market-data/kite-feed.js";
+import { KotakLiveOverview } from "../../../backend/nodejs/src/market-data/kotak-live-overview.js";
+import type { KotakMessage } from "../../../backend/nodejs/src/market-data/kotak-feed.js";
 
 function setup() {
   let time = Date.parse("2026-09-21T06:00:00Z");

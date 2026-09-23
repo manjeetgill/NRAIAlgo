@@ -5,7 +5,7 @@
  * never depends on network access or NSE's uptime.
  */
 import { describe, expect, it } from "vitest";
-import { fetchNseIndexCloses } from "../../apps/api/src/nse-bhavcopy.js";
+import { fetchNseIndexCloses } from "../../backend/nodejs/src/nse-bhavcopy.js";
 
 describe("fetchNseIndexCloses (real NSE archive)", () => {
   it(

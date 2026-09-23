@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { openDatabaseStore, runDatabaseMigrations, type Store } from "../../apps/api/src/database.js";
-import { recordSessionGrossPnl, loadSessionPerformance, SHARPE_MIN_SESSIONS } from "../../apps/api/src/session-performance.js";
+import { openDatabaseStore, runDatabaseMigrations, type Store } from "../../backend/nodejs/src/database/database.js";
+import { recordSessionGrossPnl, loadSessionPerformance, SHARPE_MIN_SESSIONS } from "../../backend/nodejs/src/session-performance.js";
 
 const WORKSPACE = "ws-session-performance-test";
 

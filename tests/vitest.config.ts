@@ -12,7 +12,7 @@ export default defineConfig({
       {
         root,
         plugins: [react()],
-        resolve: { alias: { "@": fileURLToPath(new URL("../apps/web", import.meta.url)) } },
+        resolve: { alias: { "@": fileURLToPath(new URL("../frontend/nextjs", import.meta.url)) } },
         test: { name: "web", environment: "jsdom", include: ["tests/web/**/*.test.{ts,tsx}"], setupFiles: ["tests/web/setup.ts"] },
       },
       { root, test: { name: "smoke", include: ["tests/api/**/*.smoke.test.ts"] } },

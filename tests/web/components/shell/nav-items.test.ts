@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { NAV_GROUPS } from "../../../../apps/web/app/components/shell/nav-items";
+import { NAV_GROUPS } from "../../../../frontend/nextjs/app/components/shell/nav-items";
 
 describe("application navigation", () => {
   it("links every implemented portfolio screen", () => {

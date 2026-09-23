@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createHash } from "node:crypto";
-import { breezeHeaders, equityHoldingValuation, iciciAccount, iciciLogin, type BreezeTransport } from "../../../apps/api/src/broker-auth/icici.js";
+import { breezeHeaders, equityHoldingValuation, iciciAccount, iciciLogin, type BreezeTransport } from "../../../backend/nodejs/src/broker-auth/icici.js";
 
 const credentials = { apiKey: "key", apiSecret: "secret" };
 const session = { accountId: "user1", sessionToken: Buffer.from("user1:session-key").toString("base64") };

@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { OverviewSnapshotSchema } from "@nraialgo/contracts";
-import { buildServer } from "../../../apps/api/src/server.js";
-import { openDatabaseStore, runDatabaseMigrations, type Store } from "../../../apps/api/src/database.js";
+import { buildServer } from "../../../backend/nodejs/src/server.js";
+import { openDatabaseStore, runDatabaseMigrations, type Store } from "../../../backend/nodejs/src/database/database.js";
 import { loginTestUser } from "../support/auth.js";
 
 let store: Store;

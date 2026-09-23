@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { iciciPositions } from "../../../../apps/web/app/app/overview/icici-model";
+import { iciciPositions } from "../../../../frontend/nextjs/app/app/overview/icici-model";
 
 describe("ICICI position normalization", () => {
   it("prefers broker P&L and carries broker-reported margin", () => {

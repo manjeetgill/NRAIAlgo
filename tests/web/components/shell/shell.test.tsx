@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { Shell } from "../../../../apps/web/app/components/shell/shell";
+import { Shell } from "../../../../frontend/nextjs/app/components/shell/shell";
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/app/overview",

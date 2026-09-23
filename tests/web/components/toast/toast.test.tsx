@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ToastProvider, useToast } from "../../../../apps/web/app/components/toast/toast";
+import { ToastProvider, useToast } from "../../../../frontend/nextjs/app/components/toast/toast";
 
 function Trigger() {
   const { show } = useToast();

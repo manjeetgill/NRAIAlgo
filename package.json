@@ -6,11 +6,13 @@
     "node": ">=22.13.0"
   },
   "workspaces": [
-    "apps/*"
+    "backend/nodejs",
+    "frontend/nextjs",
+    "shared/typescript"
   ],
   "scripts": {
-    "prepare-contracts": "npm run build --workspace apps/contracts",
-    "dev": "npm run prepare-contracts && npm run db:setup --workspace apps/api && concurrently -n api,web -c blue,green \"npm run dev --workspace apps/api\" \"npm run dev --workspace apps/web\"",
+    "prepare-contracts": "npm run build --workspace shared/typescript",
+    "dev": "npm run prepare-contracts && npm run db:setup --workspace backend/nodejs && concurrently -n api,web -c blue,green \"npm run dev --workspace backend/nodejs\" \"npm run dev --workspace frontend/nextjs\"",
     "build": "npm run prepare-contracts && npm run build --workspaces",
     "test": "npm run prepare-contracts && node tests/run.mjs",
     "test:api": "npm run prepare-contracts && node tests/run.mjs api",

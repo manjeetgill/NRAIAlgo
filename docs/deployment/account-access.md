@@ -10,8 +10,8 @@ verified address/channel. Do not paste codes into shared chat, tickets or logs.
 Start the API normally so migration 10 runs. From the repository root:
 
 ```sh
-npm run access-code --workspace apps/api -- --email person@example.com --purpose invite
-npm run access-code --workspace apps/api -- --email person@example.com --purpose reset
+npm run access-code --workspace backend/nodejs -- --email person@example.com --purpose invite
+npm run access-code --workspace backend/nodejs -- --email person@example.com --purpose reset
 ```
 
 Invitations require a new email; reset codes require an existing account.
@@ -26,7 +26,7 @@ container with the same image/network and verified database TLS as the migration
 job. Supply `DATABASE_ADMIN_URL_FILE` and `DATABASE_CA_FILE`, then run:
 
 ```sh
-node apps/api/dist/issue-access-code.js --email person@example.com --purpose invite
+node backend/nodejs/dist/issue-access-code.js --email person@example.com --purpose invite
 ```
 
 For recovery use `--purpose reset`. Do not mount administrator credentials into

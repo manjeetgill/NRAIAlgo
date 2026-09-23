@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { OVERVIEW_SNAPSHOT_FIXTURES } from "../../../fixtures/overview";
-import { brokerHealth } from "../../../../apps/web/app/app/overview/broker-health";
+import { brokerHealth } from "../../../../frontend/nextjs/app/app/overview/broker-health";
 it("separates configuration, authorization, portfolio and order health", () => {
  const snapshot=structuredClone(OVERVIEW_SNAPSHOT_FIXTURES["market-open"]);
  snapshot.configuredProviders=["zerodha"];

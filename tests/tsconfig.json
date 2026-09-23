@@ -4,7 +4,7 @@
     "noEmit": true,
     "jsx": "react-jsx",
     "lib": ["ES2022", "dom", "dom.iterable"],
-    "paths": { "@/*": ["../apps/web/*"] }
+    "paths": { "@/*": ["../frontend/nextjs/*"] }
   },
   "include": ["api/**/*.ts", "contracts/**/*.ts", "fixtures/**/*.ts", "vitest.config.ts"]
 }

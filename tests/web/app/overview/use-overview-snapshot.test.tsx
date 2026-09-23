@@ -1,7 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { OVERVIEW_SNAPSHOT_FIXTURES } from "../../../fixtures/overview";
-import { expireOverviewSnapshot, OVERVIEW_REQUEST_TIMEOUT_MS, useOverviewSnapshot } from "../../../../apps/web/app/app/overview/use-overview-snapshot";
+import { expireOverviewSnapshot, OVERVIEW_REQUEST_TIMEOUT_MS, useOverviewSnapshot } from "../../../../frontend/nextjs/app/app/overview/use-overview-snapshot";
 vi.mock("next/navigation", () => {
   const router = { replace: vi.fn() };
   return { useRouter: () => router };

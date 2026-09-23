@@ -7,7 +7,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "services/kotak-sdk"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "backend/python/kotak-sdk"))
 import bridge
 
 

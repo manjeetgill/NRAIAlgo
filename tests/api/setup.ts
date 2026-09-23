@@ -7,7 +7,7 @@ if (!process.env.NRAIALGO_TEST_DATABASE?.startsWith("nraialgo-tests-") ||
   throw new Error("Run API tests with npm test or npm run test:api; a disposable database is required.");
 }
 
-vi.mock("../../apps/api/src/local-database.js", () => ({
+vi.mock("../../backend/nodejs/src/database/local-database.js", () => ({
   readLocalPostgresConfiguration() { throw new Error("Tests cannot read application database configuration."); },
 }));
 

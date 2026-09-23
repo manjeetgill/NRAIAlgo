@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { OVERVIEW_SNAPSHOT_FIXTURES } from "../../../fixtures/overview";
-import { withIciciOverviewStatus } from "../../../../apps/web/app/app/overview/icici-overview-status";
-import { brokerHealth } from "../../../../apps/web/app/app/overview/broker-health";
+import { withIciciOverviewStatus } from "../../../../frontend/nextjs/app/app/overview/icici-overview-status";
+import { brokerHealth } from "../../../../frontend/nextjs/app/app/overview/broker-health";
 
 describe("ICICI overview status overlay", () => {
   it("turns a verified Breeze read into shared readiness and connection evidence", () => {

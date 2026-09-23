@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { OVERVIEW_SNAPSHOT_FIXTURES } from "../../../fixtures/overview";
-import OverviewPage from "../../../../apps/web/app/app/overview/page";
+import OverviewPage from "../../../../frontend/nextjs/app/app/overview/page";
 
 const mockRouterReplace = vi.fn();
 vi.mock("next/navigation", () => ({

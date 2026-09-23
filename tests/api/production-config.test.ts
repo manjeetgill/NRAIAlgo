@@ -3,9 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import Fastify from "fastify";
-import { databaseTlsOptions, loadSecretFiles, validateProductionConfig } from "../../apps/api/src/production-config.js";
-import { SCHEMA_VERSION, runDatabaseMigrations, verifyRuntimeDatabase, type Query, type Store } from "../../apps/api/src/database.js";
-import { readinessRoutes } from "../../apps/api/src/routes/health.js";
+import { databaseTlsOptions, loadSecretFiles, validateProductionConfig } from "../../backend/nodejs/src/production-config.js";
+import { SCHEMA_VERSION, runDatabaseMigrations, verifyRuntimeDatabase, type Query, type Store } from "../../backend/nodejs/src/database/database.js";
+import { readinessRoutes } from "../../backend/nodejs/src/routes/health.js";
 
 const folders:string[]=[];
 afterEach(()=>{for(const folder of folders.splice(0))rmSync(folder,{recursive:true,force:true});});

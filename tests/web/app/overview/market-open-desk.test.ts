@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolvedOverallPnl } from "../../../../apps/web/app/app/overview/market-open-desk";
+import { resolvedOverallPnl } from "../../../../frontend/nextjs/app/app/overview/market-open-desk";
 
 describe("resolvedOverallPnl", () => {
   it("prefers reported net P&L", () => {

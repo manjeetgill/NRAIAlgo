@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseIndexCloseCsv } from "../../apps/api/src/nse-bhavcopy.js";
+import { parseIndexCloseCsv } from "../../backend/nodejs/src/nse-bhavcopy.js";
 
 // Real rows from a live fetch of
 // https://nsearchives.nseindia.com/content/indices/ind_close_all_18092026.csv

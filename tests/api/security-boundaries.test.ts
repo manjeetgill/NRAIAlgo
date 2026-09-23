@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { buildServer } from "../../apps/api/src/server.js";
-import type { Store } from "../../apps/api/src/database.js";
+import { buildServer } from "../../backend/nodejs/src/server.js";
+import type { Store } from "../../backend/nodejs/src/database/database.js";
 const store: Store = { transaction: vi.fn(async () => { throw new Error("Unexpected database access"); }), close: async () => {} };
 afterEach(() => vi.unstubAllEnvs());
 it("rejects cross-origin mutation requests before database access", async () => {

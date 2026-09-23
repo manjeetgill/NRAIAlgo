@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { AccountAccessForm } from "../../../apps/web/app/login/account-access-form";
+import { AccountAccessForm } from "../../../frontend/nextjs/app/login/account-access-form";
 
 afterEach(() => vi.unstubAllGlobals());
 it.each(["invite", "reset"] as const)("redeems %s codes without logging in automatically", async mode => {

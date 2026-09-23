@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { OverviewSnapshotSchema } from "../../apps/contracts/src/overview-snapshot.js";
+import { OverviewSnapshotSchema } from "../../shared/typescript/src/overview-snapshot.js";
 import { OVERVIEW_SNAPSHOT_FIXTURES } from "../fixtures/overview";
-import { PnlDataSchema, ReadinessDataSchema, ConnectionEntrySchema, HoldingsPanelSchema } from "../../apps/contracts/src/panels.js";
-import type { MarketState } from "../../apps/contracts/src/common.js";
+import { PnlDataSchema, ReadinessDataSchema, ConnectionEntrySchema, HoldingsPanelSchema } from "../../shared/typescript/src/panels.js";
+import type { MarketState } from "../../shared/typescript/src/common.js";
 
 const MARKET_STATES = Object.keys(OVERVIEW_SNAPSHOT_FIXTURES) as MarketState[];
 

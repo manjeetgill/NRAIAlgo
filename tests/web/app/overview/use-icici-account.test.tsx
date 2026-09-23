@@ -1,6 +1,6 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { useIciciAccount } from "../../../../apps/web/app/app/overview/use-icici-account";
+import { useIciciAccount } from "../../../../frontend/nextjs/app/app/overview/use-icici-account";
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 it("marks retained snapshots stale after a failed refresh", async () => {
   vi.useFakeTimers();

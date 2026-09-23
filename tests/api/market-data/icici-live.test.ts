@@ -1,6 +1,6 @@
 import { expect, it, vi } from "vitest";
-import { IciciLiveMarket, positionKey } from "../../../apps/api/src/market-data/icici-live.js";
-import type { IciciFeedMessage, IciciInstrument } from "../../../apps/api/src/market-data/icici-feed.js";
+import { IciciLiveMarket, positionKey } from "../../../backend/nodejs/src/market-data/icici-live.js";
+import type { IciciFeedMessage, IciciInstrument } from "../../../backend/nodejs/src/market-data/icici-feed.js";
 
 it("keeps ICICI ticks workspace-isolated and retains the close baseline when a tick becomes stale", () => {
   let now = Date.parse("2026-09-23T04:08:00.000Z"); let receive: ((message: IciciFeedMessage) => void) | undefined; let subscribed: IciciInstrument[] = [];

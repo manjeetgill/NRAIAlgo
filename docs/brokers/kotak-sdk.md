@@ -5,11 +5,11 @@ Uses the official `kotakneoapi==3.0.7` Python package. Node starts private child
 ## Install (from repository root)
 
 ```sh
-python3 -m venv services/kotak-sdk/.venv
-services/kotak-sdk/.venv/bin/python -m pip install -r services/kotak-sdk/requirements.txt
+python3 -m venv backend/python/kotak-sdk/.venv
+backend/python/kotak-sdk/.venv/bin/python -m pip install -r backend/python/kotak-sdk/requirements.txt
 ```
 
-Python 3.10+ is required by the SDK; this integration was tested with Python 3.14. Set `KOTAK_SDK_PYTHON` in the API process environment to an alternate interpreter if needed. Otherwise Node uses the repository-local `.venv/bin/python`. Deploy the `services/kotak-sdk` directory alongside `apps/api`; the compiled API resolves the same repository-relative path.
+Python 3.10+ is required by the SDK; this integration was tested with Python 3.14. Set `KOTAK_SDK_PYTHON` in the API process environment to an alternate interpreter if needed. Otherwise Node uses the repository-local `.venv/bin/python`. Deploy the `backend/python/kotak-sdk` directory alongside `backend/nodejs`; the compiled API resolves the same repository-relative path.
 
 Missing Python/dependencies produces an unavailable broker result, never an automatic return to the old custom transport. SDK upgrades must be deliberate: pin the version and rerun normalization, session-restoration and streaming checks.
 
@@ -33,7 +33,7 @@ IPC errors are allowlisted: `TOTP_LOGIN`, `MPIN_VERIFY`, `SDK_TIMEOUT`, `SDK_MIS
 ## Test
 
 ```sh
-services/kotak-sdk/.venv/bin/python -m unittest discover -s tests/python -p 'test_*.py'
+backend/python/kotak-sdk/.venv/bin/python -m unittest discover -s tests/python -p 'test_*.py'
 npm run test:api -- tests/api/broker-auth/kotak-sdk.test.ts tests/api/market-data/broker-feeds.test.ts tests/api/market-data/live-overview.test.ts tests/api/broker-auth/broker-portfolio.test.ts
 ```
 

@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { OVERVIEW_SNAPSHOT_FIXTURES } from "../../../fixtures/overview";
-import OverviewPlaygroundPage from "../../../../apps/web/app/dev/overview-playground/page";
+import OverviewPlaygroundPage from "../../../../frontend/nextjs/app/dev/overview-playground/page";
 
 const notFoundMock = vi.fn(() => { throw new Error("NEXT_NOT_FOUND"); });
 vi.mock("next/navigation", () => ({ usePathname: () => "/dev/overview-playground", notFound: () => notFoundMock() }));

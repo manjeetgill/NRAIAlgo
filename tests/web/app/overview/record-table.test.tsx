@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { expect, it } from "vitest";
-import { RecordTable } from "../../../../apps/web/app/app/overview/record-table";
+import { RecordTable } from "../../../../frontend/nextjs/app/app/overview/record-table";
 
 it("paginates, sorts, selects columns and retains zero-valued detail fields", async () => {
   const rows = Array.from({length:26},(_,index)=>({symbol:`S${String(index).padStart(2,"0")}`,quantity:index}));

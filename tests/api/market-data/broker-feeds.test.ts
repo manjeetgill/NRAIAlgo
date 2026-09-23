@@ -1,8 +1,8 @@
 import { Worker } from "node:worker_threads";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createKiteFeed, KITE_FEED_WORKER_SOURCE, type FeedMessage } from "../../../apps/api/src/market-data/kite-feed.js";
-import { createKotakFeed } from "../../../apps/api/src/market-data/kotak-feed.js";
-import type { startKotakSdk } from "../../../apps/api/src/broker-auth/kotak-sdk.js";
+import { createKiteFeed, KITE_FEED_WORKER_SOURCE, type FeedMessage } from "../../../backend/nodejs/src/market-data/kite-feed.js";
+import { createKotakFeed } from "../../../backend/nodejs/src/market-data/kotak-feed.js";
+import type { startKotakSdk } from "../../../backend/nodejs/src/broker-auth/kotak-sdk.js";
 
 afterEach(() => vi.useRealTimers());
 

@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { kotakSdkRequest, KotakSdkError, type startKotakSdk } from "../../../apps/api/src/broker-auth/kotak-sdk.js";
-import * as sdk from "../../../apps/api/src/broker-auth/kotak-sdk.js";
-import { kotakDailyLogin } from "../../../apps/api/src/broker-auth/kotak.js";
-import { fetchKotakPortfolio } from "../../../apps/api/src/broker-auth/kotak-portfolio.js";
+import { kotakSdkRequest, KotakSdkError, type startKotakSdk } from "../../../backend/nodejs/src/broker-auth/kotak-sdk.js";
+import * as sdk from "../../../backend/nodejs/src/broker-auth/kotak-sdk.js";
+import { kotakDailyLogin } from "../../../backend/nodejs/src/broker-auth/kotak.js";
+import { fetchKotakPortfolio } from "../../../backend/nodejs/src/broker-auth/kotak-portfolio.js";
 
 afterEach(()=>vi.useRealTimers());
 describe('SDK IPC errors',()=>{

@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import AppSectionLayout from "../../../apps/web/app/app/layout";
+import AppSectionLayout from "../../../frontend/nextjs/app/app/layout";
 
 const mockRouterReplace = vi.fn();
 vi.mock("next/navigation", () => ({

@@ -1,8 +1,8 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import CashHoldingsPage from "../../../../apps/web/app/app/cash-holdings/page";
+import CashHoldingsPage from "../../../../frontend/nextjs/app/app/cash-holdings/page";
 
-vi.mock("../../../../apps/web/app/app/overview/use-overview-snapshot", () => ({ useOverviewSnapshot: () => ({ snapshot: null, error: null, stale: false }) }));
+vi.mock("../../../../frontend/nextjs/app/app/overview/use-overview-snapshot", () => ({ useOverviewSnapshot: () => ({ snapshot: null, error: null, stale: false }) }));
 vi.mock("@/app/components/shell/overview-context", () => ({ useShellOverview: vi.fn() }));
 afterEach(() => vi.unstubAllGlobals());
 

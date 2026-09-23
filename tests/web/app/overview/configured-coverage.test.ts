@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { OVERVIEW_SNAPSHOT_FIXTURES } from "../../../fixtures/overview";
-import { hasCoreCoverage, selectedProviders } from "../../../../apps/web/app/app/overview/broker-view";
+import { hasCoreCoverage, selectedProviders } from "../../../../frontend/nextjs/app/app/overview/broker-view";
 it("requires configured brokers only, but never ignores an expired configured broker", () => {
  const snapshot = structuredClone(OVERVIEW_SNAPSHOT_FIXTURES["market-open"]);
  snapshot.configuredProviders = ["zerodha"];

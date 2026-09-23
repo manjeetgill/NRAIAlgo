@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { credentialVault } from "../../apps/api/src/credential-vault.js";
+import { credentialVault } from "../../backend/nodejs/src/credential-vault.js";
 
 const testEnv = { CREDENTIAL_VAULT_KEY: "a".repeat(64) } as NodeJS.ProcessEnv;
 

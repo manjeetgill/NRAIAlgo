@@ -6,9 +6,9 @@
 - Development: [testing and database isolation](testing.md)
 - Historical evidence: [reviews](reviews/) records point-in-time findings and must not be read as the current release status.
 
-Application source remains in `apps/`, operational files in `deploy/`, and all
+Application source lives in `frontend/`, `backend/`, and `shared/`, operational files in `deploy/`, and all
 automated tests in `tests/`. The root README is the repository entry point.
-Framework-generated `apps/web/AGENTS.md` and `CLAUDE.md` stay beside Next.js
+Framework-generated `frontend/nextjs/AGENTS.md` and `CLAUDE.md` stay beside Next.js
 because its tooling regenerates them there.
 
 Use plain, descriptive commit subjects and explain behavior and verification in

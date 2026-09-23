@@ -12,13 +12,13 @@ npm run test:api
 npm run test:web
 npm run test:contracts
 npm run test:api -- tests/api/routes/auth.test.ts
-services/kotak-sdk/.venv/bin/python -B -m unittest discover -s tests/python -p 'test_*.py'
+backend/python/kotak-sdk/.venv/bin/python -B -m unittest discover -s tests/python -p 'test_*.py'
 python3 -B -m unittest discover -s tests/deploy -p 'test_*.py'
 ```
 
 API tests require Docker and the `postgres:17` image (pulled automatically if
 missing). Web and contract tests need neither Docker nor a database. Python SDK
-tests require the dependencies in `services/kotak-sdk/requirements.txt`.
+tests require the dependencies in `backend/python/kotak-sdk/requirements.txt`.
 `npm run test:smoke` is an opt-in read of external NSE data; it is excluded from
 normal tests and does not use application database credentials.
 

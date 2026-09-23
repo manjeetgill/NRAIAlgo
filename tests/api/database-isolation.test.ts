@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import pg from "pg";
-import { openDatabaseStore } from "../../apps/api/src/database.js";
-import { readLocalPostgresConfiguration } from "../../apps/api/src/local-database.js";
+import { openDatabaseStore } from "../../backend/nodejs/src/database/database.js";
+import { readLocalPostgresConfiguration } from "../../backend/nodejs/src/database/local-database.js";
 
 describe("application database isolation", () => {
   it("blocks arbitrary pools and clients before making a connection", () => {

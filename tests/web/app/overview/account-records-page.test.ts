@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatBrokerMoney } from "../../../../apps/web/app/app/overview/account-records-page";
+import { formatBrokerMoney } from "../../../../frontend/nextjs/app/app/overview/account-records-page";
 
 describe("formatBrokerMoney", () => {
   it("formats ICICI number and numeric-string values as INR consistently", () => {

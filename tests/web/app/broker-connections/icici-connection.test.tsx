@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { IciciConnection } from "../../../../apps/web/app/app/broker-connections/icici-connection";
+import { IciciConnection } from "../../../../frontend/nextjs/app/app/broker-connections/icici-connection";
 
 afterEach(() => vi.unstubAllGlobals());
 

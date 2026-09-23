@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { calculateDailyMtm, OpenPositions, type OpenPositionView } from "../../../../apps/web/app/app/overview/open-positions";
+import { calculateDailyMtm, OpenPositions, type OpenPositionView } from "../../../../frontend/nextjs/app/app/overview/open-positions";
 
 const row: OpenPositionView = { id: "one", provider: "zerodha", symbol: "NIFTY TEST", account: "test", exchange: "NFO", product: "NRML", quantity: -10, side: "SELL", average: 100, ltp: 90, pnlPaise: 10000, marginPaise: 25000 };
 

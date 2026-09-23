@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { Connect } from "kiteconnect";
-import { fetchKotakPortfolio } from "../../../apps/api/src/broker-auth/kotak-portfolio.js";
-import type { KotakSession } from "../../../apps/api/src/broker-auth/kotak.js";
-import { fetchZerodhaPortfolio, type PortfolioClient } from "../../../apps/api/src/broker-auth/zerodha-portfolio.js";
-import { fetchZerodhaOrders } from "../../../apps/api/src/broker-auth/zerodha-orders.js";
+import { fetchKotakPortfolio } from "../../../backend/nodejs/src/broker-auth/kotak-portfolio.js";
+import type { KotakSession } from "../../../backend/nodejs/src/broker-auth/kotak.js";
+import { fetchZerodhaPortfolio, type PortfolioClient } from "../../../backend/nodejs/src/broker-auth/zerodha-portfolio.js";
+import { fetchZerodhaOrders } from "../../../backend/nodejs/src/broker-auth/zerodha-orders.js";
 
 const SESSION: KotakSession = { token: "t", sid: "s", baseUrl: "https://neo.example" };
 const ACCOUNT_ID = "UCC001";

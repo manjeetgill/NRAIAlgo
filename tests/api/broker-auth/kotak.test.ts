@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { kotakDailyLogin, kotakSessionExpiry, KotakLoginError } from "../../../apps/api/src/broker-auth/kotak.js";
+import { kotakDailyLogin, kotakSessionExpiry, KotakLoginError } from "../../../backend/nodejs/src/broker-auth/kotak.js";
 
 // mpin deliberately shares no digit substring with mobileNumber/totp, so a
 // leaked-MPIN assertion can't pass by coincidental overlap.

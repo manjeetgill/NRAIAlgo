@@ -4,7 +4,7 @@ import {
   exchangeZerodhaRequestToken,
   nextKiteExpiry,
   type SessionClient,
-} from "../../../apps/api/src/broker-auth/zerodha.js";
+} from "../../../backend/nodejs/src/broker-auth/zerodha.js";
 
 describe("createZerodhaLoginUrl", () => {
   it("builds the real Kite login URL and round-trips state via redirect_params", () => {

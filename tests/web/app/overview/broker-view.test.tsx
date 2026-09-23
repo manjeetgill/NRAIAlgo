@@ -2,8 +2,8 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { OVERVIEW_SNAPSHOT_FIXTURES } from "../../../fixtures/overview";
 import { OverviewSnapshotSchema } from "@nraialgo/contracts";
-import { brokerView } from "../../../../apps/web/app/app/overview/broker-view";
-import { MarketOpenScreen } from "../../../../apps/web/app/app/overview/market-open-screen";
+import { brokerView } from "../../../../frontend/nextjs/app/app/overview/broker-view";
+import { MarketOpenScreen } from "../../../../frontend/nextjs/app/app/overview/market-open-screen";
 
 function fixture() {
   const snapshot = structuredClone(OVERVIEW_SNAPSHOT_FIXTURES["market-open"]);

@@ -1,11 +1,11 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 import { OVERVIEW_SNAPSHOT_FIXTURES } from "../../../fixtures/overview";
-import { MarketOpenScreen } from "../../../../apps/web/app/app/overview/market-open-screen";
-import { OverviewScreen } from "../../../../apps/web/app/app/overview/overview-screen";
+import { MarketOpenScreen } from "../../../../frontend/nextjs/app/app/overview/market-open-screen";
+import { OverviewScreen } from "../../../../frontend/nextjs/app/app/overview/overview-screen";
 
-vi.mock("../../../../apps/web/app/app/overview/use-icici-account", async importOriginal => {
-  const original = await importOriginal<typeof import("../../../../apps/web/app/app/overview/use-icici-account")>();
+vi.mock("../../../../frontend/nextjs/app/app/overview/use-icici-account", async importOriginal => {
+  const original = await importOriginal<typeof import("../../../../frontend/nextjs/app/app/overview/use-icici-account")>();
   return { ...original, useIciciAccount: () => ({ status: "ICICI REST snapshot", account: {
     accountId: "IC-TEST", asOf: "2026-09-22T10:00:00.000Z", sections: {
       portfolioholdings: { status: "available", rows: [{ stock_code: "IC-HOLD", quantity: 10, market_value: 1000 }] },

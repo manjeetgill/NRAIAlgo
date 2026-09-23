@@ -1,11 +1,11 @@
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { OVERVIEW_SNAPSHOT_FIXTURES } from "../../../fixtures/overview";
-import { OverviewScreen } from "../../../../apps/web/app/app/overview/overview-screen";
-import { MarketOpenScreen } from "../../../../apps/web/app/app/overview/market-open-screen";
+import { OverviewScreen } from "../../../../frontend/nextjs/app/app/overview/overview-screen";
+import { MarketOpenScreen } from "../../../../frontend/nextjs/app/app/overview/market-open-screen";
 
-vi.mock("../../../../apps/web/app/app/overview/use-icici-account", async importOriginal => {
-  const original = await importOriginal<typeof import("../../../../apps/web/app/app/overview/use-icici-account")>();
+vi.mock("../../../../frontend/nextjs/app/app/overview/use-icici-account", async importOriginal => {
+  const original = await importOriginal<typeof import("../../../../frontend/nextjs/app/app/overview/use-icici-account")>();
   return { ...original, useIciciAccount: () => ({ status: "Not connected", account: null, stale: true, refresh: () => {} }) };
 });
 

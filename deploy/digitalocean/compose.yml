@@ -42,7 +42,7 @@ services:
     init: true
     restart: unless-stopped
     read_only: true
-    tmpfs: [/tmp, /app/apps/web/.next/cache]
+    tmpfs: [/tmp, /app/frontend/nextjs/.next/cache]
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     stop_grace_period: 30s
@@ -76,7 +76,7 @@ services:
   migrate:
     profiles: [tools]
     image: nraialgo-api:${RELEASE_TAG:?Set RELEASE_TAG}
-    command: [node, apps/api/dist/migrate.js]
+    command: [node, backend/nodejs/dist/database/migrate.js]
     environment:
       NODE_ENV: production
       DATABASE_ADMIN_URL_FILE: /run/secrets/database_admin_url
@@ -91,7 +91,7 @@ services:
   admin:
     profiles: [tools]
     image: nraialgo-api:${RELEASE_TAG:?Set RELEASE_TAG}
-    entrypoint: [node, apps/api/dist/create-user.js]
+    entrypoint: [node, backend/nodejs/dist/create-user.js]
     environment:
       NODE_ENV: production
       DATABASE_URL_FILE: /run/secrets/database_url

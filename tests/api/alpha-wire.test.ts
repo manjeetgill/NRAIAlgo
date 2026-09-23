@@ -2,13 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 import Fastify from "fastify";
 import cookie from "@fastify/cookie";
 import sensible from "@fastify/sensible";
-import { AlphaWire, parseAnnouncements, safeAnnouncementUrl } from "../../apps/api/src/alpha-wire.js";
-import { alphaWireRoutes } from "../../apps/api/src/routes/alpha-wire.js";
-import type { Store, Query } from "../../apps/api/src/database.js";
+import { AlphaWire, parseAnnouncements, safeAnnouncementUrl } from "../../backend/nodejs/src/alpha-wire.js";
+import { alphaWireRoutes } from "../../backend/nodejs/src/routes/alpha-wire.js";
+import type { Store, Query } from "../../backend/nodejs/src/database/database.js";
 import type { AlphaWireItem } from "@nraialgo/contracts";
 import { safeNewsUrl } from "@nraialgo/contracts";
-import { providers, parseRss } from "../../apps/api/src/news-providers.js";
-import { MultiSourceWire } from "../../apps/api/src/multi-source-wire.js";
+import { providers, parseRss } from "../../backend/nodejs/src/news-providers.js";
+import { MultiSourceWire } from "../../backend/nodejs/src/multi-source-wire.js";
 
 const xml = `<rss><channel><item><title><![CDATA[ACME &amp; Co — Board meeting]]></title><link>https://nsearchives.nseindia.com/example.pdf</link><pubDate>Tue, 22 Sep 2026 09:00:00 +0530</pubDate></item></channel></rss>`;
 function memoryStore() {

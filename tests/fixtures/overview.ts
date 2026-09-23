@@ -1,5 +1,5 @@
-import type { OverviewSnapshot } from "../../apps/contracts/src/overview-snapshot.js";
-import type { MarketState } from "../../apps/contracts/src/common.js";
+import type { OverviewSnapshot } from "../../shared/typescript/src/overview-snapshot.js";
+import type { MarketState } from "../../shared/typescript/src/common.js";
 
 /** Test-only snapshots for market-state and contract regression checks.
  * These fixtures are not exported or bundled by any production workspace. */

@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { AlphaWire } from "../../../../apps/web/app/components/shell/alpha-wire";
+import { AlphaWire } from "../../../../frontend/nextjs/app/components/shell/alpha-wire";
 
 const item = { id: "1", title: "Example company board announcement", source: "NSE announcements", category: "Announcements", url: "https://nsearchives.nseindia.com/test.pdf", publishedAt: "2026-09-22T03:30:00Z", receivedAt: "2026-09-22T03:31:00Z" };
 const snapshot = { items: [item], source: { status: "healthy", lastCheckedAt: new Date().toISOString(), lastSuccessAt: new Date().toISOString(), pollIntervalSeconds: 300 } };

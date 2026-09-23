@@ -221,7 +221,7 @@ From the deployment directory, after running migrations:
 ```sh
 docker compose --env-file .env run --rm --no-deps --entrypoint node \
   --volume "$PWD/verified-calendar.json:/tmp/calendar.json:ro" \
-  admin apps/api/dist/import-calendar.js /tmp/calendar.json
+  admin backend/nodejs/dist/database/import-calendar.js /tmp/calendar.json
 ```
 
 The import validates the complete file and commits atomically. It replaces only

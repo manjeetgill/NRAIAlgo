@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { OVERVIEW_SNAPSHOT_FIXTURES } from "../../../fixtures/overview";
-import { MarketClosedScreen } from "../../../../apps/web/app/app/overview/market-closed-screen";
+import { MarketClosedScreen } from "../../../../frontend/nextjs/app/app/overview/market-closed-screen";
 
 // Tested directly against MarketClosedScreen (not through OverviewScreen)
 // because NonLiveDashboard's "All brokers" default view deliberately nulls

@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { issueAccessCode, redeemAccessCode } from "../../apps/api/src/account-access.js";
-import { openDatabaseStore, runDatabaseMigrations, type Store } from "../../apps/api/src/database.js";
-import { createSession, resolveSession, setUserPassword, verifyPassword } from "../../apps/api/src/auth.js";
-import { buildServer } from "../../apps/api/src/server.js";
+import { issueAccessCode, redeemAccessCode } from "../../backend/nodejs/src/account-access.js";
+import { openDatabaseStore, runDatabaseMigrations, type Store } from "../../backend/nodejs/src/database/database.js";
+import { createSession, resolveSession, setUserPassword, verifyPassword } from "../../backend/nodejs/src/auth.js";
+import { buildServer } from "../../backend/nodejs/src/server.js";
 
 let admin: Store;
 let runtime: Store;

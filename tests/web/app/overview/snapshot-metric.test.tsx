@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { expect, it } from "vitest";
-import { SnapshotMetric } from "../../../../apps/web/app/app/overview/snapshot-metric";
+import { SnapshotMetric } from "../../../../frontend/nextjs/app/app/overview/snapshot-metric";
 
 it("retains the last confirmed metric with a timestamp and never reuses it for another broker", () => {
   const { rerender } = render(<SnapshotMetric value={12500} scope="zerodha" asOf="2026-09-23T01:00:00Z" />);

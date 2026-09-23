@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatClock, formatTimeOnly } from "../../../../apps/web/app/components/shell/format-clock";
+import { formatClock, formatTimeOnly } from "../../../../frontend/nextjs/app/components/shell/format-clock";
 
 describe("formatClock", () => {
   it("formats an instant in the given timezone as 'Ddd DD Mon, HH:MM:SS'", () => {

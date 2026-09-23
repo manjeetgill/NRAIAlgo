@@ -7,7 +7,7 @@ vi.mock("next/navigation", () => ({
 
 describe("HomePage", () => {
   it("redirects to the Overview screen", async () => {
-    const { default: HomePage } = await import("../../apps/web/app/page");
+    const { default: HomePage } = await import("../../frontend/nextjs/app/page");
 
     HomePage();
 

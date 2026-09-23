@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { openDatabaseStore, runDatabaseMigrations, type Store } from "../../apps/api/src/database.js";
-import { resolveSessionState, seedNseCalendar, importCalendar } from "../../apps/api/src/market-calendar.js";
+import { openDatabaseStore, runDatabaseMigrations, type Store } from "../../backend/nodejs/src/database/database.js";
+import { resolveSessionState, seedNseCalendar, importCalendar } from "../../backend/nodejs/src/market-calendar.js";
 
 /** Distinct fixture namespace inside the disposable test cluster. */
 const EXCHANGE = "CAL_TEST";

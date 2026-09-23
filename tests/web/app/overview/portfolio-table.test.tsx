@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { expect, it } from "vitest";
-import { PortfolioTable } from "../../../../apps/web/app/app/overview/portfolio-table";
+import { PortfolioTable } from "../../../../frontend/nextjs/app/app/overview/portfolio-table";
 
 it("keeps the dashboard compact with a keyboard-scrollable table and detail link", () => {
   render(<PortfolioTable rows={[]} />);

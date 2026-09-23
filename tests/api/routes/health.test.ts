@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { buildServer } from "../../../apps/api/src/server.js";
-import { openDatabaseStore, runDatabaseMigrations, type Store } from "../../../apps/api/src/database.js";
+import { buildServer } from "../../../backend/nodejs/src/server.js";
+import { openDatabaseStore, runDatabaseMigrations, type Store } from "../../../backend/nodejs/src/database/database.js";
 
 /** /health must never touch the database, so a store that throws on any use
  * proves that -- if this test ever needs a working stub, that itself is a
