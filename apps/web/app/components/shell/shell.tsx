@@ -5,9 +5,11 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { formatTimeOnly } from "./format-clock";
 import { NAV_GROUPS, type NavItem } from "./nav-items";
-import { MOCK_INDEX_TICKER } from "./shell-data";
+import { ShellOverviewContext, type ShellOverview } from "./overview-context";
 import styles from "./shell.module.css";
 import { useClock } from "./use-clock";
+import { ThemeToggle } from "./theme-toggle";
+import { AlphaWire } from "./alpha-wire";
 
 export interface ShellProps {
   children: ReactNode;
@@ -32,13 +34,9 @@ export interface ShellProps {
  * detail (colors, density, grouping) -- see nav-items.ts for why its
  * group labels differ from the written spec's.
  *
- * Every value here is presentation only and, for now, fixed to Paper
- * mode: there is no real trading backend, so the execution strip, the
- * "Switch to Live" control, and the account badge cannot honestly
- * claim anything else. The reference design shows a working Live/Paper
- * toggle with a red Live banner; this shell deliberately does not
- * implement that toggle, since flipping it would be presentation
- * claiming a capability (live capital risk) that doesn't exist yet.
+ * Account context and readiness come from the overview read model.
+ * A live account view does not authorize execution; mode switching and
+ * execution commands stay disabled until the command service is connected.
  *
  * Nav items whose route doesn't exist yet render as inert "Planned"
  * placeholders instead of real links -- clicking a nav item should
@@ -47,6 +45,7 @@ export interface ShellProps {
 export function Shell({ children, extraHeaderBar, email, onSignOut }: ShellProps) {
   const pathname = usePathname();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [{ snapshot, stale }, setOverview] = useState<ShellOverview>({ snapshot: null, stale: false });
   const nowMs = useClock();
 
   useEffect(() => {
@@ -62,17 +61,21 @@ export function Shell({ children, extraHeaderBar, email, onSignOut }: ShellProps
   const estLabel = nowMs === 0 ? "--:--:--" : formatTimeOnly(new Date(nowMs), "America/New_York");
   const gstLabel = nowMs === 0 ? "--:--:--" : formatTimeOnly(new Date(nowMs), "Asia/Dubai");
 
+  const isLive = snapshot?.scope.context === "LIVE";
+  const safety = snapshot?.readiness.data;
+  const passed = safety ? Object.values(safety.checks).filter((check) => check.status === "passed").length : 0;
   return (
+    <ShellOverviewContext.Provider value={setOverview}>
     <div className={styles.shell}>
       <a href="#main-content" className={styles.skipLink}>
         Skip to content
       </a>
 
-      <div className={styles.executionStrip} role="status">
+      <div className={`${styles.executionStrip} ${isLive ? styles.liveStrip : ""}`} role="status">
         <div className={styles.stripLabel}>
           <span className={styles.stripDot} aria-hidden="true" />
           <span className={styles.stripText}>
-            Paper mode: orders are simulated, real money is not at risk.
+            {stale ? "Connection interrupted · showing last received account data" : isLive ? "Live account view · real brokerage balances · execution controls unavailable" : snapshot ? "Preview account view · execution controls unavailable" : "Account monitoring · awaiting verified session data"}
           </span>
         </div>
         <div className={styles.stripRight}>
@@ -85,7 +88,7 @@ export function Shell({ children, extraHeaderBar, email, onSignOut }: ShellProps
             <span className={`material-symbols-outlined ${styles.navIcon}`} aria-hidden="true">
               swap_horiz
             </span>
-            Switch to live (locked)
+            Execution locked
           </button>
         </div>
       </div>
@@ -110,25 +113,18 @@ export function Shell({ children, extraHeaderBar, email, onSignOut }: ShellProps
           </div>
 
           <div className={styles.secondaryClocks}>
-            <span>EST {estLabel}</span>
+            <span>NY {estLabel}</span>
             <span>/</span>
             <span>GST {gstLabel}</span>
           </div>
 
           <div className={styles.ticker}>
-            {MOCK_INDEX_TICKER.map((item) => (
-              <span key={item.label} className={styles.tickerItem}>
-                <span className={styles.tickerLabel}>{item.label}</span>
-                <span className={styles.tickerValue}>{item.value}</span>
-                <span className={item.direction === "up" ? styles.tickerUp : styles.tickerDown}>
-                  {item.changePercent}
-                </span>
-              </span>
-            ))}
+            <span className={styles.tickerLabel}>{snapshot?.session.data?.state.replaceAll("-", " ").toUpperCase() ?? "SESSION UNKNOWN"}</span>
           </div>
         </div>
 
         <div className={styles.accountArea}>
+          <ThemeToggle />
           <div className={styles.accountBadgeStack}>
             <span className={styles.accountBadge}>{email ?? "Not signed in"}</span>
             {email && onSignOut ? (
@@ -147,7 +143,7 @@ export function Shell({ children, extraHeaderBar, email, onSignOut }: ShellProps
         </div>
       </div>
 
-      {extraHeaderBar}
+      <div className={styles.extraHeaderBar}>{extraHeaderBar}</div>
 
       <div className={styles.body}>
         {drawerOpen && (
@@ -176,7 +172,7 @@ export function Shell({ children, extraHeaderBar, email, onSignOut }: ShellProps
 
             <div className={styles.safetyPill}>
               <span className={styles.safetyLabel}>Session Safety</span>
-              <span className={styles.safetyValue}>Not connected</span>
+              <span className={styles.safetyValue}>{stale ? "Stale" : safety ? `${passed}/4 passed` : "Unknown"}</span>
             </div>
 
             <div className={styles.nav}>
@@ -208,16 +204,18 @@ export function Shell({ children, extraHeaderBar, email, onSignOut }: ShellProps
               <span className="material-symbols-outlined" aria-hidden="true">
                 warning
               </span>
-              Halt all trading
+              Halt new entries
             </button>
           </div>
         </nav>
 
         <main id="main-content" className={styles.main}>
+          <AlphaWire enabled={!!email} />
           {children}
         </main>
       </div>
     </div>
+    </ShellOverviewContext.Provider>
   );
 }
 

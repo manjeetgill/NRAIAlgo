@@ -1,32 +1,34 @@
 import { buildServer } from "./server.js";
-import { openDatabaseStore, runDatabaseMigrations } from "./database.js";
+import { openDatabaseStore, runDatabaseMigrations, verifyRuntimeDatabase } from "./database.js";
+import { loadSecretFiles, validateProductionConfig } from "./production-config.js";
 import { readLocalPostgresConfiguration } from "./local-database.js";
 import { seedNseCalendar } from "./market-calendar.js";
 
-// Migrations run first, over a separate administrative connection, and must
-// finish before anything else touches the database -- a fresh production
-// database has no tables at all until this runs, so seeding or serving
-// first would fail (or, worse, half-succeed) against a schema that isn't
-// there yet.
-//
-// DATABASE_ADMIN_URL is deliberately distinct from DATABASE_URL: the admin
-// connection can create tables/roles, the app's own connection (opened
-// below) cannot. In local dev both are derived from the same disposable
-// cluster; in production they must be genuinely different credentials.
-const local = process.env.NODE_ENV === "production" ? undefined : readLocalPostgresConfiguration();
+// Development bootstraps its database; production uses a separate migration
+// job. The long-running API must never receive administrative credentials.
+loadSecretFiles();
+validateProductionConfig();
+const production = process.env.NODE_ENV === "production";
+const local = production ? undefined : readLocalPostgresConfiguration();
 const adminUrl = process.env.DATABASE_ADMIN_URL ?? local?.adminUrl;
-const migrationStore = openDatabaseStore(adminUrl);
-try {
-  await runDatabaseMigrations(migrationStore, {
-    runtimePassword: process.env.DATABASE_URL ? process.env.APP_DATABASE_PASSWORD : local?.applicationPassword,
-  });
-} finally {
-  await migrationStore.close();
+if (!production) {
+  const migrationStore = openDatabaseStore(adminUrl);
+  try {
+    await runDatabaseMigrations(migrationStore, {
+      runtimePassword: process.env.DATABASE_URL ? process.env.APP_DATABASE_PASSWORD : local?.applicationPassword,
+    });
+  } finally {
+    await migrationStore.close();
+  }
 }
 
 // Only after migrations have committed does the API open its own, more
 // restricted connection (the nraialgo_app role, which has DML but no DDL).
 const store = openDatabaseStore();
+if (production) {
+  try { await verifyRuntimeDatabase(store); }
+  catch { await store.close(); throw new Error("Production database validation failed; check migration and restricted role setup"); }
+}
 
 // Idempotent (ON CONFLICT DO NOTHING) -- keeps a rolling window of real
 // NSE/EQ session boundaries available, so the calendar the Overview screen
@@ -47,7 +49,7 @@ async function reseedCalendar() {
     // A failed reseed must not crash a running server -- the existing
     // window keeps serving; resolveSessionState already fails closed
     // ("unknown") once/if that window is exhausted.
-    console.error("NSE calendar reseed failed:", err);
+    console.error("NSE calendar reseed failed:", production ? "Check database connectivity and calendar coverage" : err);
   }
 }
 await reseedCalendar();
@@ -66,8 +68,15 @@ const port = Number(process.env.API_PORT ?? 4000);
 // HOST opts back into 0.0.0.0 explicitly for a real multi-host deployment.
 const host = process.env.HOST ?? "127.0.0.1";
 
-app.listen({ port, host }).catch((err: unknown) => {
-  app.log.error(err);
+app.listen({ port, host }).catch(async (err: unknown) => {
+  // { err }, not a bare positional arg: pino copies a bare Error's .message
+  // into the log entry's top-level `msg` field, which the production `err`
+  // serializer in server.ts does not cover -- only the nested `err` key is
+  // redacted. This is the only call site that isn't already { err }-shaped;
+  // every other one (broker-auth.ts, health.ts) already gets this right.
+  app.log.error({ err }, "Failed to start listening");
+  await app.close();
+  await store.close();
   process.exitCode = 1;
 });
 

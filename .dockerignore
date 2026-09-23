@@ -1,0 +1,17 @@
+.git
+**/node_modules
+**/.next
+**/dist
+**/coverage
+**/.runtime
+**/.venv
+**/__pycache__
+**/*.pyc
+**/*.tsbuildinfo
+**/.env
+**/.env.*
+**/secrets
+**/*.pem
+**/*.key
+**/*.log
+.DS_Store

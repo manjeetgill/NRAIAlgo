@@ -1,10 +1,63 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { buildServer } from "../server.js";
 import { openDatabaseStore, runDatabaseMigrations, type Store } from "../database.js";
 import { readLocalPostgresConfiguration } from "../local-database.js";
-import { hashPassword } from "../auth.js";
+import { hashPassword, verifyPassword } from "../auth.js";
+import type { Query } from "../database.js";
 
 let store: Store;
+
+describe("first-user setup", () => {
+  it("requires the setup key, hashes the password, and closes after the first user", async () => {
+    vi.stubEnv("INITIAL_SETUP_TOKEN", "a".repeat(64));
+    let saved: { email: string; hash: string } | undefined;
+    const statements: string[] = [];
+    // Serialized transactions model the users-table lock without touching real accounts.
+    let pending = Promise.resolve();
+    const query: Query = async <T>(sql: string, params?: (string | number | boolean | null)[]) => {
+      statements.push(sql);
+      if (sql.startsWith("SELECT id FROM users")) return (saved ? [{ id: "first" }] : []) as T[];
+      if (sql.startsWith("INSERT INTO users")) saved = { email: String(params![0]), hash: String(params![1]) };
+      return [];
+    };
+    const fakeStore: Store = {
+      transaction(fn) { const result = pending.then(() => fn(query)); pending = result.then(() => undefined, () => undefined); return result; },
+      async close() {},
+    };
+    const app = buildServer(fakeStore);
+    const payload = { email: " OWNER@example.com ", password: "a-long-secret-password", setupToken: "a".repeat(64) };
+    try {
+      expect((await app.inject({ method: "GET", url: "/v1/auth/setup" })).json()).toEqual({ needsSetup: true, setupEnabled: true });
+      const badKey = await app.inject({ method: "POST", url: "/v1/auth/setup", payload: { ...payload, setupToken: "b".repeat(64) } });
+      expect(badKey.statusCode).toBe(403);
+      expect(saved).toBeUndefined();
+      expect((await app.inject({ method: "POST", url: "/v1/auth/setup", payload: { ...payload, password: "short" } })).statusCode).toBe(400);
+      const results = await Promise.all([1, 2].map(() => app.inject({ method: "POST", url: "/v1/auth/setup", payload })));
+      expect(results.map(r => r.statusCode).sort()).toEqual([201, 409]);
+      expect(saved?.email).toBe("owner@example.com");
+      expect(verifyPassword(payload.password, saved!.hash)).toBe(true);
+      expect(statements.filter(sql => sql.startsWith("INSERT"))).toHaveLength(1);
+      const lock = statements.indexOf("LOCK TABLE users IN EXCLUSIVE MODE");
+      expect(statements[lock + 1]).toBe("SELECT id FROM users LIMIT 1");
+      expect(statements[lock + 2]).toMatch(/^INSERT INTO users/);
+      expect((await app.inject({ method: "GET", url: "/v1/auth/setup" })).json()).toEqual({ needsSetup: false, setupEnabled: false });
+    } finally { await app.close(); vi.unstubAllEnvs(); }
+  });
+
+  it("disables setup without an operator key and rate limits attempts", async () => {
+    vi.stubEnv("INITIAL_SETUP_TOKEN", "");
+    const fakeStore: Store = { async transaction(fn) { return fn(async () => []); }, async close() {} };
+    const app = buildServer(fakeStore);
+    try {
+      const status = await app.inject({ method: "GET", url: "/v1/auth/setup" });
+      expect(status.headers["cache-control"]).toBe("no-store");
+      expect(status.json()).toEqual({ needsSetup: true, setupEnabled: false });
+      const results = [];
+      for (let i = 0; i < 6; i++) results.push((await app.inject({ method: "POST", url: "/v1/auth/setup", payload: {} })).statusCode);
+      expect(results).toEqual([403, 403, 403, 403, 403, 429]);
+    } finally { await app.close(); vi.unstubAllEnvs(); }
+  });
+});
 
 beforeAll(async () => {
   const local = readLocalPostgresConfiguration();

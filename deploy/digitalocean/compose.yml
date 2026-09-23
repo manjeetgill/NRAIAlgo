@@ -1,0 +1,115 @@
+name: nraialgo
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "3" }
+
+x-api-env: &api-env
+  NODE_ENV: production
+  HOST: 0.0.0.0
+  API_PORT: "4000"
+  TRUST_PROXY: "1"
+  FRONTEND_ORIGIN: https://${APP_DOMAIN:?Set APP_DOMAIN}
+  API_PUBLIC_ORIGIN: https://${APP_DOMAIN:?Set APP_DOMAIN}
+  DATABASE_URL_FILE: /run/secrets/database_url
+  DATABASE_CA_FILE: /run/secrets/database_ca
+  CREDENTIAL_VAULT_KEY_FILE: /run/secrets/vault_key
+
+services:
+  api:
+    image: nraialgo-api:${RELEASE_TAG:?Set RELEASE_TAG to a git revision}
+    build: { context: ../.., target: api }
+    environment: *api-env
+    secrets: [database_url, database_ca, vault_key]
+    init: true
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    stop_grace_period: 45s
+    logging: *logging
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:4000/v1/readiness').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 6s
+      retries: 3
+      start_period: 30s
+
+  web:
+    image: nraialgo-web:${RELEASE_TAG:?Set RELEASE_TAG}
+    build: { context: ../.., target: web }
+    init: true
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp, /app/apps/web/.next/cache]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    stop_grace_period: 30s
+    logging: *logging
+    depends_on:
+      api: { condition: service_healthy }
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3010/login').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 6s
+      retries: 3
+
+  caddy:
+    image: caddy:2-alpine
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?Set APP_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL}
+    ports: ["80:80", "443:443", "443:443/udp"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    read_only: true
+    tmpfs: [/tmp]
+    restart: unless-stopped
+    logging: *logging
+    depends_on:
+      api: { condition: service_healthy }
+      web: { condition: service_healthy }
+
+  migrate:
+    profiles: [tools]
+    image: nraialgo-api:${RELEASE_TAG:?Set RELEASE_TAG}
+    command: [node, apps/api/dist/migrate.js]
+    environment:
+      NODE_ENV: production
+      DATABASE_ADMIN_URL_FILE: /run/secrets/database_admin_url
+      DATABASE_CA_FILE: /run/secrets/database_ca
+    secrets: [database_admin_url, database_ca]
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    logging: *logging
+
+  admin:
+    profiles: [tools]
+    image: nraialgo-api:${RELEASE_TAG:?Set RELEASE_TAG}
+    entrypoint: [node, apps/api/dist/create-user.js]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL_FILE: /run/secrets/database_url
+      DATABASE_CA_FILE: /run/secrets/database_ca
+    secrets: [database_url, database_ca]
+    stdin_open: true
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    logging: *logging
+
+secrets:
+  database_url: { file: ./secrets/database-url }
+  database_admin_url: { file: ./secrets/database-admin-url }
+  database_ca: { file: ./secrets/database-ca.crt }
+  vault_key: { file: ./secrets/vault-key }
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -4,6 +4,40 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { OverviewSnapshotSchema, type OverviewSnapshot } from "@nraialgo/contracts";
 
+export const OVERVIEW_REQUEST_TIMEOUT_MS = 30_000;
+
+/** Expire presentation flags even when the network (or a response body) hangs. */
+export function expireOverviewSnapshot(base: OverviewSnapshot, now: number, receivedAt: number): OverviewSnapshot {
+  const expired = (asOf: string, limit: number) => !Number.isFinite(Date.parse(asOf)) ||
+    now - Date.parse(asOf) >= limit || now - receivedAt >= limit;
+  const next = structuredClone(base);
+  let changed = false;
+  for (const quote of next.prices.data ?? []) {
+    if (quote.fresh && expired(quote.sourceAsOf, 15_000)) {
+      quote.fresh = false; quote.priceBasis = "last-observed"; changed = true;
+      if (next.prices.data) { next.prices.status = "degraded"; next.prices.reason = "Price freshness expired; waiting for a current response"; }
+    }
+  }
+  for (const row of next.positions?.data ?? []) {
+    if (row.fresh && expired(row.asOf, 15_000)) { row.fresh = false; changed = true; }
+  }
+  if (next.marketStream?.status === "streaming" && (!next.marketStream.lastTickAt || expired(next.marketStream.lastTickAt, 15_000))) {
+    next.marketStream.status = "stale"; next.marketStream.reason = "Tick freshness expired"; changed = true;
+  }
+  if (next.readiness.data?.checks.priceFeed.status === "passed" &&
+      (now - receivedAt >= 15_000 || next.prices.data?.some(q => !q.fresh))) {
+    next.readiness.data.checks.priceFeed = { status: "unknown", reason: "Price freshness expired" };
+    next.readiness.data.liveTradeEligible = false; changed = true;
+  }
+  for (const key of ["positions", "pnl", "holdings", "brokerOrders"] as const) {
+    const panel = next[key];
+    if (panel?.data && panel.status === "available" && expired(panel.asOf, 30_000)) {
+      Object.assign(panel, { status: "degraded", reason: "Account data freshness expired; showing last reported values" }); changed = true;
+    }
+  }
+  return changed ? next : base;
+}
+
 export interface UseOverviewSnapshotResult {
   snapshot: OverviewSnapshot | null;
   loading: boolean;
@@ -26,7 +60,9 @@ export interface UseOverviewSnapshotResult {
  * flipping to a bare error notice on every dropped poll. `stale` is what
  * the caller uses to show that warning.
  *
- * Follows the guide's display-refresh policy: a 15-second fallback poll
+ * Reads the server's tick-backed cache once per second while the market is
+ * open; broker REST reconciliation stays server-side at ten seconds.
+ * Outside market hours this uses a 15-second fallback poll
  * while the tab is visible, plus an immediate refetch when the tab
  * *becomes* visible again (covers reconnect-after-sleep -- not on every
  * visibilitychange, which also fires on hide) and on explicit refresh().
@@ -52,34 +88,64 @@ export function useOverviewSnapshot(): UseOverviewSnapshotResult {
   // value, which would otherwise be a stale closure (the effect only
   // re-runs on [reloadToken, router], not on every snapshot update).
   const hasSnapshotRef = useRef(false);
+  const marketOpenRef = useRef(false);
+  const lastSuccessRef = useRef<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    let inFlight = false;
+    let lastStarted = 0;
+    let retryAfter = 0;
+    let failures = 0;
+    let deadline: ReturnType<typeof setTimeout> | undefined;
+
+    function expire() {
+      const receivedAt = lastSuccessRef.current;
+      if (receivedAt === null) return;
+      const now = Date.now();
+      setSnapshot(current => current ? expireOverviewSnapshot(current, now, receivedAt) : current);
+      if (now - receivedAt >= (marketOpenRef.current ? 15_000 : 45_000)) setStale(true);
+    }
 
     async function load() {
+      // A slow initial account read must finish; do not abort it every second.
+      if (inFlight || Date.now() < retryAfter) return;
+      inFlight = true;
+      lastStarted = Date.now();
       const requestId = ++latestRequestId.current;
       activeController.current?.abort();
       const controller = new AbortController();
       activeController.current = controller;
 
       try {
-        const response = await fetch("/v1/overview", { signal: controller.signal });
+        const request = (async () => {
+          const response = await fetch("/v1/overview", { signal: controller.signal, cache: "no-store" });
+          if (response.status === 401) return null;
+          if (!response.ok) throw new Error(`Overview request failed (HTTP ${response.status})`);
+          return OverviewSnapshotSchema.parse(await response.json());
+        })();
+        // Race covers BOTH headers and body, even if a transport ignores abort.
+        const parsed = await Promise.race([request, new Promise<never>((_resolve, reject) => {
+          deadline = setTimeout(() => {
+            reject(new Error("Overview request timed out; retrying"));
+            controller.abort();
+          }, OVERVIEW_REQUEST_TIMEOUT_MS);
+        })]);
         if (cancelled || requestId !== latestRequestId.current) {
           return;
         }
-        if (response.status === 401) {
+        if (parsed === null) {
           router.replace("/login");
           return;
         }
-        if (!response.ok) {
-          throw new Error(`Overview request failed (HTTP ${response.status})`);
-        }
-        const parsed = OverviewSnapshotSchema.parse(await response.json());
         if (cancelled || requestId !== latestRequestId.current) {
           return;
         }
         hasSnapshotRef.current = true;
-        setSnapshot(parsed);
+        lastSuccessRef.current = Date.now();
+        failures = 0; retryAfter = 0;
+        marketOpenRef.current = parsed.session.data?.state === "market-open";
+        setSnapshot(expireOverviewSnapshot(parsed, Date.now(), lastSuccessRef.current));
         setError(null);
         setStale(false);
       } catch (caught) {
@@ -91,12 +157,15 @@ export function useOverviewSnapshot(): UseOverviewSnapshotResult {
           return;
         }
         setError(caught instanceof Error ? caught.message : "Overview request failed");
+        retryAfter = Date.now() + Math.min(30_000, 1000 * 2 ** failures++);
         // A prior successful snapshot stays visible (never cleared here) --
         // just flagged stale so the caller can show a warning above it.
         if (hasSnapshotRef.current) {
           setStale(true);
         }
       } finally {
+        clearTimeout(deadline);
+        inFlight = false;
         if (!cancelled && requestId === latestRequestId.current) {
           setLoading(false);
         }
@@ -105,12 +174,14 @@ export function useOverviewSnapshot(): UseOverviewSnapshotResult {
 
     void load();
     const interval = setInterval(() => {
-      if (!document.hidden) {
+      expire();
+      if (!document.hidden && Date.now() - lastStarted >= (marketOpenRef.current ? 1000 : 15000)) {
         void load();
       }
-    }, 15000);
+    }, 1000);
     const onVisibilityChange = () => {
       if (document.visibilityState === "visible") {
+        expire();
         void load();
       }
     };
@@ -119,6 +190,7 @@ export function useOverviewSnapshot(): UseOverviewSnapshotResult {
     return () => {
       cancelled = true;
       activeController.current?.abort();
+      clearTimeout(deadline);
       clearInterval(interval);
       window.removeEventListener("focus", onVisibilityChange);
       document.removeEventListener("visibilitychange", onVisibilityChange);

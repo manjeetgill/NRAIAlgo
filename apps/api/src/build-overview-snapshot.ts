@@ -1,7 +1,7 @@
 /** Assembles a real OverviewSnapshot.
  *
  * - session is genuinely computed from PostgreSQL (see market-calendar.ts).
- * - prices is genuinely fetched from NSE's own published index-close
+ * - outside the live feed path, prices are fetched from NSE's published index-close
  *   archives (see nse-bhavcopy.ts) for the last completed trading day. This
  *   is real official data with no broker credentials involved -- but it is
  *   end-of-day only, never a live tick, and the panel says so via priceBasis.
@@ -16,10 +16,11 @@
  * - deployment stays unavailable regardless of broker sessions: it
  *   describes a strategy/worker engine, which does not exist in this
  *   project at all yet -- a broker session cannot supply it.
- * - connections and activity stay unavailable: they describe live
- *   streaming feed status and an audit-event log, neither of which is
- *   wired up yet (broker sessions here are used for on-demand portfolio
- *   reads, not a persistent stream).
+ * - Zerodha positions, broker-level balances and same-day orders are read
+ *   from the broker. The route overlays the workspace-isolated WebSocket
+ *   tick cache and connection status on this slower account baseline.
+ * - activity stays unavailable: a broker order book is not an immutable
+ *   internal audit log. It is exposed separately as brokerOrders.
  *
  * Deliberately split into two phases so a broker/NSE network call is never
  * made while holding a PostgreSQL transaction open: loadOverviewInputs does
@@ -35,6 +36,7 @@ import { resolveSessionState } from "./market-calendar.js";
 import { fetchNseIndexCloses } from "./nse-bhavcopy.js";
 import { fetchZerodhaPortfolio } from "./broker-auth/zerodha-portfolio.js";
 import { fetchKotakPortfolio } from "./broker-auth/kotak-portfolio.js";
+import { fetchZerodhaOrders } from "./broker-auth/zerodha-orders.js";
 import { ZerodhaSessionSchema } from "./broker-auth/zerodha.js";
 import { KotakSessionSchema } from "./broker-auth/kotak.js";
 import { z } from "zod";
@@ -66,8 +68,9 @@ export interface SnapshotDeps {
   fetchNseIndexCloses: typeof fetchNseIndexCloses;
   fetchZerodhaPortfolio: typeof fetchZerodhaPortfolio;
   fetchKotakPortfolio: typeof fetchKotakPortfolio;
+  fetchZerodhaOrders?: typeof fetchZerodhaOrders;
 }
-const REAL_DEPS: SnapshotDeps = { fetchNseIndexCloses, fetchZerodhaPortfolio, fetchKotakPortfolio };
+const REAL_DEPS: SnapshotDeps = { fetchNseIndexCloses, fetchZerodhaPortfolio, fetchKotakPortfolio, fetchZerodhaOrders };
 
 async function buildPricesPanel(
   session: OverviewSnapshot["session"],
@@ -97,6 +100,7 @@ function combineHoldings(parts: HoldingsData[]): HoldingsData {
     availableMarginPaise: parts.reduce((sum, part) => sum + part.availableMarginPaise, 0),
     accountAsOf: parts[0]!.accountAsOf,
     valuationAsOf: parts[0]!.valuationAsOf,
+    brokerBalances: parts.flatMap((part) => part.brokerBalances ?? []),
   };
 }
 
@@ -163,6 +167,7 @@ export interface ZerodhaInputs {
 export interface KotakInputs {
   session: z.infer<typeof KotakSessionSchema>;
   accountId: string;
+  appAccessToken?: string;
 }
 export interface OverviewInputs {
   session: OverviewSnapshot["session"];
@@ -238,7 +243,7 @@ export async function loadOverviewInputs(
       KotakAppCredentialsSchema,
     );
     if (credentials) {
-      kotak = { session: kotakSession, accountId: credentials.ucc };
+      kotak = { session: kotakSession, accountId: credentials.ucc, appAccessToken: credentials.accessToken };
     }
   }
 
@@ -250,14 +255,17 @@ async function buildPortfolioPanels(
   scope: Scope,
   now: Date,
   deps: SnapshotDeps,
-): Promise<{ pnl: OverviewSnapshot["pnl"]; holdings: OverviewSnapshot["holdings"]; connectedProviders: string[] }> {
+): Promise<{ pnl: OverviewSnapshot["pnl"]; holdings: OverviewSnapshot["holdings"]; positions?: OverviewSnapshot["positions"]; connectedProviders: string[]; brokerReconciliation: OverviewSnapshot["brokerReconciliation"] }> {
+  const brokerReconciliation: NonNullable<OverviewSnapshot["brokerReconciliation"]> = {};
   const holdingsParts: HoldingsData[] = [];
   const pnlParts: PnlData[] = [];
   const connectedProviders: string[] = [];
   const attemptedProviders: string[] = [];
   const errors: string[] = [];
+  let positions: OverviewSnapshot["positions"];
 
   if (inputs.zerodha) {
+    brokerReconciliation.zerodha = { accountId: inputs.zerodha.accountId, status: "failed", asOf: null };
     attemptedProviders.push("zerodha");
     try {
       const portfolio = await deps.fetchZerodhaPortfolio(
@@ -270,18 +278,23 @@ async function buildPortfolioPanels(
       holdingsParts.push(portfolio.holdings);
       pnlParts.push(portfolio.pnl);
       connectedProviders.push("zerodha");
+      if (portfolio.positions) brokerReconciliation.zerodha = { accountId: inputs.zerodha.accountId, status: "confirmed", asOf: now.toISOString() };
+      if (portfolio.positions) positions = { status: "available", source: "zerodha-positions", asOf: now.toISOString(), version: 1, reason: null, data: portfolio.positions };
     } catch (caught) {
       errors.push(`Zerodha: ${caught instanceof Error ? caught.message : "portfolio read failed"}`);
     }
   }
 
   if (inputs.kotak) {
+    brokerReconciliation.kotak = { accountId: inputs.kotak.accountId, status: "failed", asOf: null };
     attemptedProviders.push("kotak");
     try {
-      const portfolio = await deps.fetchKotakPortfolio(inputs.kotak.session, scope.context, now, inputs.kotak.accountId);
+      const portfolio = await deps.fetchKotakPortfolio(inputs.kotak.session, scope.context, now, inputs.kotak.accountId, undefined, 8000, inputs.kotak.appAccessToken);
       holdingsParts.push(portfolio.holdings);
       pnlParts.push(portfolio.pnl);
       connectedProviders.push("kotak");
+      if (portfolio.positions) brokerReconciliation.kotak = { accountId: inputs.kotak.accountId, status: "confirmed", asOf: now.toISOString() };
+      if (portfolio.positions) positions = { status: "available", source: positions ? `${positions.source}+kotak-positions` : "kotak-positions", asOf: now.toISOString(), version: 1, reason: null, data: [...(positions?.data ?? []), ...portfolio.positions] };
     } catch (caught) {
       errors.push(`Kotak: ${caught instanceof Error ? caught.message : "portfolio read failed"}`);
     }
@@ -294,6 +307,7 @@ async function buildPortfolioPanels(
     return {
       pnl: unavailablePanel(source, reason),
       holdings: unavailablePanel(source, reason),
+      brokerReconciliation,
       connectedProviders,
     };
   }
@@ -304,8 +318,10 @@ async function buildPortfolioPanels(
   // actually succeeded, and that gap must be stated, never dropped.
   const isPartial = attemptedProviders.length > connectedProviders.length;
   const reason = isPartial ? `${errors.join("; ")}; totals include only ${connectedProviders.join(" and ")}` : null;
+  if (positions?.data && isPartial) positions = { ...positions, data: positions.data, asOf: nowIso, status: "degraded", reason: reason! };
 
   return {
+    ...(positions ? { positions } : {}),
     pnl: isPartial
       ? { status: "degraded" as const, source, asOf: nowIso, version: 1, reason: reason!, data: combinePnl(pnlParts) }
       : { status: "available" as const, source, asOf: nowIso, version: 1, reason: null, data: combinePnl(pnlParts) },
@@ -327,6 +343,7 @@ async function buildPortfolioPanels(
           data: combineHoldings(holdingsParts),
         },
     connectedProviders,
+    brokerReconciliation,
   };
 }
 
@@ -341,8 +358,15 @@ export async function buildOverviewSnapshot(
 ): Promise<OverviewSnapshot> {
   const nowIso = now.toISOString();
 
-  const prices = await buildPricesPanel(inputs.session, nowIso, deps);
-  const { pnl, holdings, connectedProviders } = await buildPortfolioPanels(inputs, scope, now, deps);
+  // During the open session the persistent feed supplies quotes; never wait
+  // for an EOD download before delivering a live account snapshot.
+  const prices = inputs.zerodha && inputs.session.data?.state === "market-open"
+    ? unavailablePanel("zerodha-websocket", "WAITING_FOR_LIVE_TICKS")
+    : await buildPricesPanel(inputs.session, nowIso, deps);
+  const [{ pnl, holdings, positions, connectedProviders, brokerReconciliation }, brokerOrders] = await Promise.all([
+    buildPortfolioPanels(inputs, scope, now, deps),
+    inputs.zerodha && deps.fetchZerodhaOrders ? deps.fetchZerodhaOrders(inputs.zerodha) : undefined,
+  ]);
   const hasBrokerSession = connectedProviders.length > 0;
 
   return {
@@ -357,6 +381,9 @@ export async function buildOverviewSnapshot(
     prices,
     pnl,
     holdings,
+    brokerReconciliation,
+    ...(positions ? { positions } : {}),
+    ...(brokerOrders ? { brokerOrders } : {}),
     // No strategy/worker engine exists in this project -- a broker session
     // reads portfolio data on demand, it does not run or supervise anything.
     deployment: unavailablePanel("none", "NO_STRATEGY_ENGINE"),
@@ -378,9 +405,11 @@ export async function buildOverviewSnapshot(
         liveTradeEligible: false,
       },
     },
-    // Streaming-feed status and an audit-event log are separate features
-    // from on-demand portfolio reads and are not wired up yet.
-    connections: unavailablePanel("none", "NO_LIVE_STREAM_CONFIGURED"),
+    // Successful account reads verify REST connectivity, not a tick stream.
+    connections: connectedProviders.length ? {
+      status: "available", source: "broker-account-reads", asOf: nowIso, version: 1, reason: null,
+      data: connectedProviders.map(provider => ({source: `${provider} account REST`, status: "connected" as const, latencyMs: null, asOf: nowIso})),
+    } : unavailablePanel("none", "NO_VERIFIED_BROKER_READS"),
     activity: unavailablePanel("none", "NO_AUDIT_LOG_CONFIGURED"),
   };
 }

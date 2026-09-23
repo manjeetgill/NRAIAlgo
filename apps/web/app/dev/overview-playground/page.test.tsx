@@ -1,49 +1,24 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { OVERVIEW_SNAPSHOT_FIXTURES } from "@nraialgo/contracts";
 import OverviewPlaygroundPage from "./page";
 
-const notFoundMock = vi.fn(() => {
-  throw new Error("NEXT_NOT_FOUND");
-});
-vi.mock("next/navigation", () => ({
-  usePathname: () => "/dev/overview-playground",
-  notFound: () => notFoundMock(),
-}));
+const notFoundMock = vi.fn(() => { throw new Error("NEXT_NOT_FOUND"); });
+vi.mock("next/navigation", () => ({ usePathname: () => "/dev/overview-playground", notFound: () => notFoundMock() }));
+vi.mock("@/app/app/overview/use-overview-snapshot", () => ({ useOverviewSnapshot: () => ({ snapshot: OVERVIEW_SNAPSHOT_FIXTURES["market-open"], loading: false, error: null, stale: false }) }));
 
-describe("OverviewPlaygroundPage", () => {
-  afterEach(() => {
-    vi.unstubAllEnvs();
-    notFoundMock.mockClear();
-  });
-
-  it("shows a different state's content when the switcher selects it", () => {
+describe("legacy overview playground", () => {
+  afterEach(() => { vi.unstubAllEnvs(); notFoundMock.mockClear(); });
+  it("uses the account page and layout selector instead of example snapshots", () => {
     render(<OverviewPlaygroundPage />);
-
-    fireEvent.click(screen.getByRole("radio", { name: "Weekend / holiday" }));
-
+    fireEvent.click(screen.getByRole("button", { name: "Weekend / holiday" }));
     expect(screen.getByRole("heading", { name: "Weekend / holiday" })).toBeInTheDocument();
-  });
-
-  it("discloses that it's a design-review playground, not production", () => {
-    render(<OverviewPlaygroundPage />);
-
-    expect(screen.getByText(/Design review playground/)).toBeInTheDocument();
-  });
-
-  it("renders inside the real app shell so states preview in context", () => {
-    render(<OverviewPlaygroundPage />);
-
+    expect(screen.getByText(/Actual server session: Market open/)).toBeInTheDocument();
+    expect(screen.queryByText(/fixed example data/)).not.toBeInTheDocument();
     expect(screen.getByText("NRAIAlgo")).toBeInTheDocument();
-    expect(screen.getByText(/Paper mode: orders are simulated/)).toBeInTheDocument();
   });
-
-  it("calls notFound() instead of rendering when NODE_ENV is production", () => {
+  it("retains the production guard for the legacy dev URL", () => {
     vi.stubEnv("NODE_ENV", "production");
-
     expect(() => render(<OverviewPlaygroundPage />)).toThrow("NEXT_NOT_FOUND");
-    // React may retry the throwing render internally; what matters is that
-    // it was called at least once and the page never rendered its content.
-    expect(notFoundMock).toHaveBeenCalled();
-    expect(screen.queryByText(/Design review playground/)).not.toBeInTheDocument();
   });
 });

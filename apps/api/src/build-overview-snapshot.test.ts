@@ -162,7 +162,7 @@ describe("buildOverviewSnapshot -- prices panel", () => {
     expect(snapshot.deployment.status).toBe("unavailable");
     expect(snapshot.deployment.reason).toBe("NO_STRATEGY_ENGINE");
     expect(snapshot.connections.status).toBe("unavailable");
-    expect(snapshot.connections.reason).toBe("NO_LIVE_STREAM_CONFIGURED");
+    expect(snapshot.connections.reason).toBe("NO_VERIFIED_BROKER_READS");
     expect(snapshot.activity.status).toBe("unavailable");
     expect(snapshot.activity.reason).toBe("NO_AUDIT_LOG_CONFIGURED");
   });

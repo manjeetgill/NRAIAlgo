@@ -23,8 +23,11 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>
+    <html lang="en" suppressHydrationWarning className={`${inter.variable} ${jetbrainsMono.variable}`}>
       <head>
+        {/* Apply the saved palette before paint; only a fixed allowlisted value
+            is written. The server cannot read browser-local preferences. */}
+        <script dangerouslySetInnerHTML={{ __html: `try{document.documentElement.dataset.theme=localStorage.getItem('nraialgo-theme')==='light'?'light':'dark'}catch{}` }} />
         {/* Material Symbols is an icon font, not a text typeface --
             next/font doesn't cover variable icon fonts like this, so
             it's loaded the same way the reference design does: a

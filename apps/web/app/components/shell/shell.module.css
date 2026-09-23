@@ -21,7 +21,7 @@
 /* ---- Execution mode strip ---- */
 
 .executionStrip {
-  height: 36px;
+  min-height: 36px;
   width: 100%;
   background: var(--color-paper-amber-deep);
   color: #1a1300;
@@ -79,7 +79,7 @@
 }
 
 .modeButton {
-  background: rgba(11, 14, 20, 0.85);
+  background: var(--color-surface-elevated);
   color: var(--color-paper-amber);
   border: none;
   border-radius: 6px;
@@ -227,6 +227,8 @@
 
 .accountArea {
   display: flex;
+  flex-wrap: wrap;
+  min-width: 0;
   align-items: center;
   gap: 10px;
 }
@@ -419,7 +421,7 @@
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid var(--color-border-subtle);
-  background: rgba(26, 34, 52, 0.5);
+  background: var(--dashboard-button, rgba(26, 34, 52, 0.5));
 }
 
 .safetyLabel {
@@ -433,8 +435,8 @@
   font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
   font-size: 0.65rem;
   font-weight: 700;
-  color: var(--color-success-emerald);
-  background: rgba(16, 185, 129, 0.1);
+  color: var(--color-text-secondary);
+  background: var(--color-surface-elevated);
   padding: 1px 6px;
   border-radius: 4px;
 }
@@ -553,7 +555,7 @@
 .haltButton {
   width: 100%;
   background: var(--color-killswitch-dark);
-  color: var(--color-text-primary);
+  color: var(--color-live-fg);
   border: 1px solid rgba(239, 68, 68, 0.4);
   border-radius: 6px;
   padding: 10px 12px;
@@ -576,6 +578,18 @@
 
 .backdropOpen {
   display: none;
+}
+
+.liveStrip { background: var(--color-live-crimson-deep); color: #fff; }
+.extraHeaderBar { min-width: 0; }
+@media (min-width: 768px) {
+  .shell { display: grid; grid-template-columns: 240px minmax(0, 1fr); grid-template-rows: auto auto auto 1fr; align-items: start; }
+  .body { display: contents; }
+  .sidebar { grid-column: 1; grid-row: 1 / 5; position: sticky; top: 0; height: 100dvh; overflow-y: auto; }
+  .executionStrip { grid-column: 2; grid-row: 1; position: sticky; top: 0; z-index: 20; }
+  .metricsBar { grid-column: 2; grid-row: 2; }
+  .extraHeaderBar { grid-column: 2; grid-row: 3; }
+  .main { grid-column: 2; grid-row: 4; width: 100%; }
 }
 
 @media (max-width: 767px) {

@@ -1,0 +1,9 @@
+# Optional, first-user browser setup only. Remove this override after setup.
+services:
+  api:
+    environment:
+      INITIAL_SETUP_TOKEN_FILE: /run/secrets/initial_setup_token
+    secrets: [initial_setup_token]
+
+secrets:
+  initial_setup_token: { file: ./secrets/initial-setup-token }

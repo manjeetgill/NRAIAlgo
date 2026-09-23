@@ -1,12 +1,13 @@
-/** Kotak Neo direct login: step 2 (daily authorization) for the broker
+/** Kotak Neo official Python SDK login: step 2 (daily authorization) for the broker
  * already set up in step 1. No OAuth redirect -- a two-step sequence
- * (TOTP login, then MPIN validation), ported from AlgoTrade's proven
- * kotak-market-data-client.ts against the same two endpoints.
+ * (TOTP login, then MPIN validation). An injected HTTP reader is retained
+ * only for legacy protocol tests; production always uses the SDK bridge.
  *
  * Kotak Neo sessions are short-lived; this caps the stored expiry at 8
  * hours from login, matching the same cap AlgoTrade's client applies.
  */
 import { z } from "zod";
+import {KotakSdkError,kotakSdkRequest} from './kotak-sdk.js';
 
 export class KotakLoginError extends Error {
   constructor(public readonly stage: "TOTP_LOGIN" | "MPIN_VERIFY" | "UNEXPECTED_RESPONSE", message: string) {
@@ -49,8 +50,18 @@ async function callKotak(
 
 export async function kotakDailyLogin(
   input: { accessToken: string; mobileNumber: string; ucc: string; totp: string; mpin: string },
-  fetchImpl: typeof fetch = fetch,
+  fetchImpl?: typeof fetch,
 ): Promise<KotakSession> {
+  if(!fetchImpl) {
+    try {
+      const parsed=KotakSessionSchema.safeParse(await kotakSdkRequest('login',input));
+      if(!parsed.success)throw new KotakSdkError('SDK_INVALID_RESPONSE');
+      return parsed.data;
+    } catch(error) {
+      if(error instanceof KotakSdkError && (error.code==='TOTP_LOGIN'||error.code==='MPIN_VERIFY')) throw new KotakLoginError(error.code,error.message);
+      throw error;
+    }
+  }
   const headers = {
     Authorization: input.accessToken,
     "neo-fin-key": "neotradeapi",

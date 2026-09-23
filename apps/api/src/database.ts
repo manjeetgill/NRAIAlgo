@@ -4,6 +4,9 @@
  */
 import { readLocalPostgresConfiguration } from "./local-database.js";
 import pg from "pg";
+import { databaseTlsOptions } from "./production-config.js";
+
+export const SCHEMA_VERSION = 8;
 
 type Parameter = string | number | boolean | null;
 export type Query = <T = Record<string, unknown>>(
@@ -30,7 +33,7 @@ export function openDatabaseStore(
     );
   }
   const pool = new pg.Pool({
-    connectionString: url,
+    ...databaseTlsOptions(url),
     max: 5,
     connectionTimeoutMillis: 5000,
     idleTimeoutMillis: 30000,
@@ -83,7 +86,7 @@ export function openDatabaseStore(
  * connection this runs under) are never given to the running API. */
 export async function runDatabaseMigrations(
   store: Store,
-  options: { runtimePassword?: string | undefined } = {
+  options: { runtimePassword?: string | undefined; runtimeRole?: string } = {
     runtimePassword: process.env.APP_DATABASE_PASSWORD,
   },
 ) {
@@ -206,28 +209,61 @@ export async function runDatabaseMigrations(
       );
       await query("INSERT INTO schema_migrations (version) VALUES (6)");
     }
-    if (options.runtimePassword) {
+    if (!(await query("SELECT version FROM schema_migrations WHERE version=7")).length) {
+      // Public source headlines only. Never store workspace/account events here.
+      await query(`CREATE TABLE alpha_wire_items (
+        id TEXT PRIMARY KEY, payload JSONB NOT NULL, received_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )`);
+      await query("CREATE INDEX alpha_wire_received_idx ON alpha_wire_items(received_at DESC)");
+      await query("INSERT INTO schema_migrations (version) VALUES (7)");
+    }
+    if (!(await query("SELECT version FROM schema_migrations WHERE version=8")).length) {
+      await query("CREATE TABLE alpha_wire_poll_state (provider TEXT PRIMARY KEY, next_poll_at TIMESTAMPTZ NOT NULL)");
+      await query("INSERT INTO schema_migrations (version) VALUES (8)");
+    }
+    if (options.runtimePassword || options.runtimeRole) {
+      if (options.runtimeRole && options.runtimeRole !== "nraialgo_app") throw new Error("Unsupported runtime database role");
       const password = options.runtimePassword;
       if (
         !(
           await query("SELECT rolname FROM pg_roles WHERE rolname='nraialgo_app'")
         ).length
       ) {
+        if (!password) throw new Error("Create the nraialgo_app user in DigitalOcean before migrating");
         await query(
           "CREATE ROLE nraialgo_app LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE",
         );
       }
-      // ALTER ROLE takes a literal, not a bind parameter; the password is server-generated
-      // (see local-database.ts), never user input, so this is not an injection surface.
-      await query(`ALTER ROLE nraialgo_app PASSWORD '${password}'`);
+      // ALTER ROLE needs a SQL literal. Do not assume supplied deployment
+      // passwords contain only alphanumeric characters.
+      await query("SET LOCAL standard_conforming_strings = on");
+      if (password) await query(`ALTER ROLE nraialgo_app PASSWORD '${password.replaceAll("'", "''")}'`);
+      // Use a dedicated application database. Remove default schema creation
+      // privileges, including PUBLIC's inherited grant on older PostgreSQL.
+      await query("REVOKE CREATE ON SCHEMA public FROM PUBLIC");
+      await query("REVOKE ALL ON SCHEMA public FROM nraialgo_app");
+      await query("REVOKE ALL ON schema_migrations FROM nraialgo_app");
       await query("GRANT USAGE ON SCHEMA public TO nraialgo_app");
       await query(
-        "GRANT SELECT,INSERT,UPDATE,DELETE ON market_calendar,broker_app_credentials,broker_sessions,users,sessions,zerodha_oauth_state,calendar_metadata TO nraialgo_app",
+        "GRANT SELECT,INSERT,UPDATE,DELETE ON market_calendar,broker_app_credentials,broker_sessions,users,sessions,zerodha_oauth_state,calendar_metadata,alpha_wire_items,alpha_wire_poll_state TO nraialgo_app",
       );
       // Read-only: the running API reports the schema version (/v1/readiness)
       // but must never itself apply a migration -- INSERT/UPDATE/DELETE here
       // stay ungranted deliberately.
       await query("GRANT SELECT ON schema_migrations TO nraialgo_app");
     }
+  });
+}
+
+export async function verifyRuntimeDatabase(store: Store) {
+  await store.transaction(async query => {
+    const [version] = await query<{ max: number | null }>("SELECT MAX(version) as max FROM schema_migrations");
+    if (version?.max !== SCHEMA_VERSION) throw new Error("Database schema is not compatible; run the release migration first");
+    const [role] = await query<{ safe: boolean }>(`SELECT (current_user = 'nraialgo_app'
+      AND NOT rolsuper AND NOT rolcreatedb AND NOT rolcreaterole AND NOT rolbypassrls
+      AND NOT has_schema_privilege(current_user, 'public', 'CREATE')
+      AND NOT has_table_privilege(current_user, 'schema_migrations', 'INSERT,UPDATE,DELETE')) AS safe
+      FROM pg_roles WHERE rolname = current_user`);
+    if (!role?.safe) throw new Error("Runtime database role is overprivileged");
   });
 }

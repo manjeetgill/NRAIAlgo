@@ -1,11 +1,15 @@
-import type { OverviewSnapshot } from "@nraialgo/contracts";
+import type { MarketState, OverviewSnapshot } from "@nraialgo/contracts";
 import { PanelCard } from "./panel-card";
 import { formatPaise, formatTimestamp } from "./format";
 import { STATE_LABEL } from "./session-labels";
 import styles from "./overview.module.css";
+import { MarketOpenScreen } from "./market-open-screen";
+import { MarketClosedScreen } from "./market-closed-screen";
+import { PreOpenScreen } from "./pre-open-screen";
 
 export interface OverviewScreenProps {
   snapshot: OverviewSnapshot;
+  layout?: MarketState | undefined;
 }
 
 /**
@@ -16,8 +20,22 @@ export interface OverviewScreenProps {
  * component renders identically whether it's fed by the production page's
  * live fetch or the dev playground's labeled fixtures.
  */
-export function OverviewScreen({ snapshot }: OverviewScreenProps) {
+export function OverviewScreen({ snapshot, layout }: OverviewScreenProps) {
   const session = snapshot.session;
+  // Select presentation without modifying the authoritative session or data.
+  if (layout === "pre-open") return <PreOpenScreen snapshot={snapshot} layoutOnly />;
+  if (layout === "market-open") return <MarketOpenScreen snapshot={snapshot} layoutOnly />;
+  if (layout === "after-close" || layout === "weekend-holiday") return <MarketClosedScreen snapshot={snapshot} layout={layout} />;
+  if (session.data?.state === "pre-open" && session.data.calendarValid) {
+    return <PreOpenScreen snapshot={snapshot} />;
+  }
+
+  if (session.data?.state === "market-open" && session.data.calendarValid) {
+    return <MarketOpenScreen snapshot={snapshot} />;
+  }
+  if (session.data?.calendarValid && (session.data.state === "after-close" || session.data.state === "weekend-holiday")) {
+    return <MarketClosedScreen snapshot={snapshot} />;
+  }
 
   return (
     <>

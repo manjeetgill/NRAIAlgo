@@ -1,11 +1,5 @@
-/**
- * Design tokens matching the approved "NRIAlgo Institutional Pro"
- * design system (Stitch-generated DESIGN.md). This product is a dark
- * trading terminal by design, not a light/dark-adaptive app -- every
- * visual reference given for it (the original PDF mockup and this
- * design system) is dark-only, so these tokens are applied
- * unconditionally rather than behind prefers-color-scheme.
- */
+/* Dark remains the default. The saved appearance preference only changes
+   presentation; it never changes trading/account or market-session state. */
 :root {
   color-scheme: dark;
 
@@ -79,6 +73,81 @@
   --color-shell-border: var(--color-border-subtle);
   --color-shell-accent: var(--color-primary);
 }
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --color-surface-base: #f2f5f9;
+  --color-surface-subtle: #ffffff;
+  --color-surface-elevated: #e9eff6;
+  --color-surface-overlay: #dde7f2;
+  --color-surface-container: #ffffff;
+  --color-surface-container-low: #f5f7fa;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-high: #e9eff6;
+  --color-surface-container-highest: #dce5ef;
+  --color-surface-bright: #ffffff;
+  --color-border-subtle: #d4deea;
+  --color-border-strong: #aabbd0;
+  --color-border-accent: #1d4ed8;
+  --color-text-primary: #17263b;
+  --color-text-secondary: #465970;
+  --color-text-muted: #566980;
+  --color-text-inverse: #ffffff;
+  --color-primary: #08754e;
+  --color-on-primary: #ffffff;
+  --color-live-crimson: #bc2535;
+  --color-live-crimson-deep: #b91c1c;
+  --color-paper-amber: #925600;
+  --color-paper-amber-deep: #f6bd55;
+  --color-success-emerald: #08754e;
+  --color-success-emerald-deep: #056641;
+  --color-state-purple: #7540b4;
+  --color-latency-good: #08754e;
+  --color-latency-warning: #925600;
+  --color-latency-critical: #bc2535;
+  --color-status-positive-bg: #e3f3eb;
+  --color-status-negative-bg: #fce9ec;
+  --color-status-warning-bg: #fff1d7;
+  --color-status-error-fg: #bc2535;
+  --color-accent-primary: #1d4ed8;
+  --dashboard-card: #ffffff;
+  --dashboard-inset: #f3f6fa;
+  --dashboard-banner: #edf3fc;
+  --dashboard-weekend: #f3eefb;
+  --dashboard-border: #d4deea;
+  --dashboard-button: #e9eff6;
+  --dashboard-track: #dce5ef;
+  --dashboard-warning-bg: #fff4df;
+  --dashboard-warning-border: #dbb66d;
+  --dashboard-danger-bg: #fce9ec;
+  --dashboard-danger-border: #d99aa3;
+  --dashboard-danger-fg: #bc2535;
+  --dashboard-closed-accent: #245caa;
+  --dashboard-weekend-accent: #7540b4;
+}
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 8px;
+  background: var(--color-surface-elevated);
+  color: var(--color-text-primary);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.theme-toggle span { font-size: 18px; line-height: 1; }
+.theme-toggle:hover { border-color: var(--color-primary); }
+.theme-toggle:focus-visible { outline: 2px solid var(--color-border-accent); outline-offset: 3px; }
 
 * {
   box-sizing: border-box;

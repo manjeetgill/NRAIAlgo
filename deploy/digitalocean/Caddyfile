@@ -1,0 +1,35 @@
+{
+  email {$ACME_EMAIL}
+  admin off
+}
+
+{$APP_DOMAIN} {
+  encode zstd gzip
+  header {
+    -Server
+    X-Content-Type-Options nosniff
+    Referrer-Policy no-referrer
+    X-Frame-Options DENY
+    Strict-Transport-Security "max-age=31536000"
+  }
+  request_body {
+    max_size 64KB
+  }
+  # Do not enable raw access logs: broker callbacks contain one-time tokens.
+  handle /v1/alpha-wire/stream {
+    reverse_proxy api:4000 {
+      flush_interval -1
+      header_up X-Forwarded-For {remote_host}
+      header_up X-Forwarded-Proto {scheme}
+    }
+  }
+  handle /v1/* {
+    reverse_proxy api:4000 {
+      header_up X-Forwarded-For {remote_host}
+      header_up X-Forwarded-Proto {scheme}
+    }
+  }
+  handle {
+    reverse_proxy web:3010
+  }
+}

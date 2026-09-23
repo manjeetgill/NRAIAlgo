@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { OVERVIEW_SNAPSHOT_FIXTURES } from "@nraialgo/contracts";
 import OverviewPage from "./page";
@@ -43,13 +43,25 @@ describe("OverviewPage (production)", () => {
     );
   });
 
-  it("never renders a state switcher -- production must not let the client choose its own state", async () => {
+  it("provides labelled layout previews and returns to the real snapshot without mutations", async () => {
     mockFetchOnce(OVERVIEW_SNAPSHOT_FIXTURES["market-open"]);
 
     render(<OverviewPage />);
 
     await waitFor(() => expect(screen.queryByText(/Loading Overview/)).not.toBeInTheDocument());
-    expect(screen.queryByRole("radio")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Auto · actual session" })).toHaveAttribute("aria-pressed", "true");
+    for (const name of ["Pre-open", "After close", "Weekend / holiday", "Market open"]) {
+      fireEvent.click(screen.getByRole("button", { name }));
+      expect(screen.getByRole("heading", { name })).toBeInTheDocument();
+      expect(screen.getByRole("status", { name: "Layout preview notice" })).toHaveTextContent("REAL ACCOUNT DATA");
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Auto · actual session" }));
+    expect(screen.queryByRole("status", { name: "Layout preview notice" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Market open" })).toBeInTheDocument();
+    for (const [url, options] of vi.mocked(fetch).mock.calls) {
+      expect(url).toBe("/v1/overview");
+      expect(options?.method ?? "GET").toBe("GET");
+    }
   });
 
   it("shows an honest error instead of fabricating a snapshot when the request fails", async () => {

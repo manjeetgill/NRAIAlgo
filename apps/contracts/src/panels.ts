@@ -89,12 +89,36 @@ export const HoldingsDataSchema = z.object({
   holdings: z.array(HoldingRowSchema),
   collateralPaise: paise().nonnegative(),
   usedMarginPaise: paise().nonnegative(),
-  availableMarginPaise: paise().nonnegative(),
+  availableMarginPaise: paise(),
+  brokerBalances: z.array(z.object({
+    provider: z.string(), accountId: z.string(), availableMarginPaise: paise(),
+    usedMarginPaise: paise(), collateralPaise: paise(), asOf: z.iso.datetime(),
+  })).optional(),
   accountAsOf: z.iso.datetime().nullable(),
   valuationAsOf: z.iso.datetime().nullable(),
 });
 export type HoldingsData = z.infer<typeof HoldingsDataSchema>;
 export const HoldingsPanelSchema = panel(HoldingsDataSchema);
+
+export const PositionRowSchema = z.object({
+  provider: z.string(), accountId: z.string(), instrumentToken: z.number().int().positive(),
+  exchange: z.string(), symbol: z.string(), product: z.string(), quantity: z.number(),
+  multiplier: z.number().positive(), averagePrice: z.number(), lastPrice: z.number(),
+  pnlPaise: paise(), asOf: z.iso.datetime(), fresh: z.boolean(),
+});
+export type PositionRow = z.infer<typeof PositionRowSchema>;
+export const PositionsPanelSchema = panel(z.array(PositionRowSchema));
+export const BrokerOrdersPanelSchema = panel(z.array(z.object({
+  orderId: z.string(), symbol: z.string(), exchange: z.string(), product: z.string(),
+  side: z.string(), status: z.string(), quantity: z.number(), filledQuantity: z.number(),
+  averagePrice: z.number(),
+})));
+
+export const MarketStreamSchema = z.object({
+  status: z.enum(["connecting", "streaming", "stale", "reconnecting", "unavailable"]),
+  lastTickAt: z.iso.datetime().nullable(), displayIntervalMs: z.number(),
+  accountIntervalMs: z.number(), reason: z.string().nullable(),
+});
 
 export const DeploymentDataSchema = z.object({
   deploymentId: z.string().nullable(),

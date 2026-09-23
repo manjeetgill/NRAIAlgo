@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import type { Store } from "../database.js";
+import { SCHEMA_VERSION } from "../database.js";
 
 /**
  * Liveness check only.
@@ -28,7 +29,9 @@ export function readinessRoutes(store: Store) {
         const [row] = await store.transaction((query) =>
           query<{ max: number | null }>("SELECT MAX(version) as max FROM schema_migrations"),
         );
-        return { status: "ok", schemaVersion: row?.max ?? null };
+        const current = row?.max ?? null;
+        if (current !== SCHEMA_VERSION) return reply.code(503).send({ status: "unavailable", schemaVersion: current });
+        return { status: "ok", schemaVersion: current };
       } catch (error) {
         request.log.error({ err: error }, "Readiness check: database unreachable");
         return reply.code(503).send({ status: "unavailable", schemaVersion: null });

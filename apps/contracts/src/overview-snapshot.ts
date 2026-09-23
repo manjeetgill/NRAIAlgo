@@ -9,6 +9,9 @@ import {
   PricesPanelSchema,
   ReadinessPanelSchema,
   SessionPanelSchema,
+  PositionsPanelSchema,
+  MarketStreamSchema,
+  BrokerOrdersPanelSchema,
 } from "./panels.js";
 
 /** The Overview screen's whole state in one response. A database snapshot is not a
@@ -33,5 +36,14 @@ export const OverviewSnapshotSchema = z.object({
   readiness: ReadinessPanelSchema,
   connections: ConnectionsPanelSchema,
   activity: ActivityPanelSchema,
+  positions: PositionsPanelSchema.optional(),
+  marketStream: MarketStreamSchema.optional(),
+  brokerOrders: BrokerOrdersPanelSchema.optional(),
+  // Per-provider evidence: a partial aggregate must not block a healthy broker
+  // or let a failed broker borrow another broker's reconciliation timestamp.
+  brokerReconciliation: z.object({
+    zerodha: z.object({ accountId: z.string(), status: z.enum(["confirmed", "failed"]), asOf: z.iso.datetime().nullable() }).optional(),
+    kotak: z.object({ accountId: z.string(), status: z.enum(["confirmed", "failed"]), asOf: z.iso.datetime().nullable() }).optional(),
+  }).optional(),
 });
 export type OverviewSnapshot = z.infer<typeof OverviewSnapshotSchema>;

@@ -7,9 +7,10 @@
  *
  * Usage: npm run create-user --workspace apps/api -- --email you@example.com --password 'a strong password'
  */
-import { openDatabaseStore, runDatabaseMigrations } from "./database.js";
+import { openDatabaseStore, runDatabaseMigrations, verifyRuntimeDatabase } from "./database.js";
 import { readLocalPostgresConfiguration } from "./local-database.js";
 import { hashPassword } from "./auth.js";
+import { loadSecretFiles } from "./production-config.js";
 
 function readArg(name: string): string | undefined {
   const index = process.argv.indexOf(`--${name}`);
@@ -17,10 +18,17 @@ function readArg(name: string): string | undefined {
 }
 
 async function main() {
+  loadSecretFiles();
   const email = readArg("email")?.trim().toLowerCase();
-  const password = readArg("password");
+  let password = readArg("password");
+  if (process.env.NODE_ENV === "production" && password) throw new Error("Use --password-stdin in production; never put passwords in arguments");
+  if (process.argv.includes("--password-stdin")) {
+    let input = "";
+    for await (const chunk of process.stdin) { input += chunk.toString(); if (input.length > 1024) throw new Error("Password input too long"); }
+    password = input.replace(/[\r\n]+$/, "");
+  }
   if (!email || !password) {
-    console.error("Usage: --email <email> --password <password>");
+    console.error("Usage: --email <email> --password-stdin (production) or --password <password> (development)");
     process.exitCode = 1;
     return;
   }
@@ -30,11 +38,12 @@ async function main() {
     return;
   }
 
-  const local = readLocalPostgresConfiguration();
+  const local = process.env.NODE_ENV === "production" ? undefined : readLocalPostgresConfiguration();
   const url = process.env.DATABASE_URL ?? local?.adminUrl;
   const store = openDatabaseStore(url);
   try {
-    await runDatabaseMigrations(store, {
+    if (process.env.NODE_ENV === "production") await verifyRuntimeDatabase(store);
+    if (process.env.NODE_ENV !== "production") await runDatabaseMigrations(store, {
       runtimePassword: process.env.DATABASE_URL ? undefined : local?.applicationPassword,
     });
     const passwordHash = hashPassword(password);
@@ -51,4 +60,4 @@ async function main() {
   }
 }
 
-void main();
+void main().catch(() => { console.error("User setup failed. Check arguments, database access and schema; no credentials were logged."); process.exitCode = 1; });

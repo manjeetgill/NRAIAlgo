@@ -4,6 +4,7 @@ import cookie from "@fastify/cookie";
 import Fastify, { type FastifyInstance } from "fastify";
 import { healthRoutes, readinessRoutes } from "./routes/health.js";
 import { authRoutes } from "./routes/auth.js";
+import { alphaWireRoutes } from "./routes/alpha-wire.js";
 import { overviewRoutes } from "./routes/overview.js";
 import { brokerCredentialsRoutes } from "./routes/broker-credentials.js";
 import { brokerAuthRoutes } from "./routes/broker-auth.js";
@@ -32,7 +33,20 @@ export function buildServer(
     kotakDailyLogin?: typeof kotakDailyLogin;
   } = {},
 ): FastifyInstance {
-  const app = Fastify({ logger: true });
+  const app = Fastify({
+    trustProxy: process.env.TRUST_PROXY === "1" ? (_address, hop) => hop === 0 : false,
+    requestTimeout: 30_000,
+    bodyLimit: 64 * 1024,
+    logger: {
+      serializers: {
+        // OAuth callbacks contain single-use tokens: never log query strings,
+        // authorization headers, cookies or request bodies.
+        req: request => ({ method: request.method, url: request.url.split("?")[0] ?? "/", remoteAddress: request.ip }),
+        ...(process.env.NODE_ENV === "production" ? { err: () => ({ type: "Error", stack: "", message: "Operation failed; sensitive error details withheld" }) } : {}),
+      },
+      redact: ["req.headers.authorization", "req.headers.cookie", "res.headers.set-cookie"],
+    },
+  });
 
   app.register(sensible);
   app.register(cookie);
@@ -43,6 +57,7 @@ export function buildServer(
   app.register(healthRoutes);
   app.register(readinessRoutes(store));
   app.register(authRoutes(store));
+  app.register(alphaWireRoutes(store));
   app.register(overviewRoutes(store, vault));
   app.register(brokerCredentialsRoutes(store, vault));
   app.register(brokerAuthRoutes(store, vault, brokerAuthDeps));
