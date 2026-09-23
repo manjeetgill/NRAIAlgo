@@ -82,7 +82,7 @@ export async function fetchKotakPortfolio(
 ): Promise<KotakPortfolio> {
   // Production uses the official Python SDK. Injected HTTP readers are only
   // a compatibility seam for normalization tests, never an automatic fallback.
-  const sdk = fetchImpl ? null : z.object({holdings:z.unknown(),positions:z.unknown(),limits:z.unknown(),quotes:z.array(z.unknown())}).parse(await kotakSdkRequest('portfolio',{session,accountId,appAccessToken}));
+  const sdk = fetchImpl ? null : z.object({holdings:z.unknown(),positions:z.unknown(),limits:z.unknown(),quotes:z.array(z.unknown())}).parse(await kotakSdkRequest('portfolio',{session,accountId,appAccessToken},undefined,timeoutMs));
   const [holdingsRaw, positionsRaw, limitsRaw] = sdk ? [sdk.holdings,sdk.positions,sdk.limits] : await Promise.all([
     callKotak(fetchImpl!, `${session.baseUrl}/portfolio/v1/holdings`, session, {}, timeoutMs),
     callKotak(fetchImpl!, `${session.baseUrl}/quick/user/positions`, session, {}, timeoutMs),
@@ -110,6 +110,7 @@ export async function fetchKotakPortfolio(
     const price = requireNumeric(row.closingPrice ?? row.ltp, "holding price");
     if (quantity < 0 || price < 0) throw new Error("Kotak demat holding has a negative quantity or price");
     return {
+    details: Object.fromEntries(["displaySymbol","symbol","quantity","pledgedQuantity","closingPrice","ltp","averagePrice","isin"].filter(key=>["string","number"].includes(typeof row[key])).map(key=>[key,row[key] as string|number])),
     provider: "kotak",
     accountId,
     symbol: text(row.displaySymbol || row.symbol),
@@ -157,6 +158,7 @@ export async function fetchKotakPortfolio(
     const pnlPaise = rupeesToPaise(sellAmount - buyAmount + quantity * lastPrice * multiplier);
     nativeGrossPaise += pnlPaise;
     if (quantity !== 0) normalized.push(PositionRowSchema.parse({
+      details: Object.fromEntries(["cfBuyQty","flBuyQty","cfSellQty","flSellQty","cfBuyAmt","buyAmt","cfSellAmt","sellAmt","multiplier","genNum","genDen","prcNum","prcDen"].filter(key=>["string","number"].includes(typeof row[key])).map(key=>[key,row[key]])),
       provider: "kotak", accountId, instrumentToken: n("tok"), exchange: text(row.exSeg), symbol: text(row.trdSym), product: text(row.prod),
       quantity, multiplier, averagePrice: quantity > 0 ? buyAmount / (buyQty * multiplier) : sellAmount / (sellQty * multiplier),
       lastPrice, pnlPaise, asOf: nowIso, fresh: false,

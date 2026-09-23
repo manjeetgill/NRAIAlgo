@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type { Store } from "../database.js";
 import { SCHEMA_VERSION } from "../database.js";
+import { calendarCoverage } from "../market-calendar.js";
 
 /**
  * Liveness check only.
@@ -24,6 +25,13 @@ export async function healthRoutes(app: FastifyInstance): Promise<void> {
  */
 export function readinessRoutes(store: Store) {
   return async function routes(app: FastifyInstance): Promise<void> {
+    app.get("/v1/calendar-health", async (_request, reply) => {
+      reply.header("Cache-Control", "no-store");
+      try {
+        const coverage = await store.transaction(query => calendarCoverage(query));
+        return reply.code(coverage.status === "ok" ? 200 : 503).send(coverage);
+      } catch { return reply.code(503).send({status:"unavailable"}); }
+    });
     app.get("/v1/readiness", async (request, reply) => {
       try {
         const [row] = await store.transaction((query) =>

@@ -12,7 +12,7 @@ const VIEWS = ["market-open", "pre-open", "after-close", "weekend-holiday"] as c
 /** Temporary presentation-only control. Never publish layout selections to the
  * shell or fetch hook; their session state and refresh cadence remain real.
  * Remove by replacing this component with OverviewScreen in page.tsx. */
-export function TemporaryViewSelector({ snapshot }: { snapshot: OverviewSnapshot }) {
+export function TemporaryViewSelector({ snapshot, stale = false }: { snapshot: OverviewSnapshot; stale?: boolean }) {
   const [preview, setPreview] = useState<MarketState | null>(null);
   return <>
     <div className={shellStyles.switcherBar} role="group" aria-label="Temporary dashboard view selector">
@@ -23,6 +23,6 @@ export function TemporaryViewSelector({ snapshot }: { snapshot: OverviewSnapshot
       </div>
     </div>
     {preview !== null && <div className={styles.mockNotice} role="status" aria-label="Layout preview notice"><strong>REAL ACCOUNT DATA · {STATE_LABEL[preview]} layout</strong><p>Actual server session: {STATE_LABEL[snapshot.session.data?.state ?? "unknown"]}. All views use the latest account snapshot, not historical results for the selected session. Missing data stays unavailable. Switching layouts does not change orders, workers, positions or execution permissions.</p></div>}
-    <OverviewScreen snapshot={snapshot} layout={preview ?? undefined} />
+    <OverviewScreen snapshot={snapshot} layout={preview ?? undefined} stale={stale} />
   </>;
 }

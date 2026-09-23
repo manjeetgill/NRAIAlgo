@@ -1,11 +1,11 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { openDatabaseStore, runDatabaseMigrations, type Store } from "./database.js";
 import { readLocalPostgresConfiguration } from "./local-database.js";
-import { resolveSessionState, seedNseCalendar } from "./market-calendar.js";
+import { resolveSessionState, seedNseCalendar, importCalendar } from "./market-calendar.js";
 
 /** Uses a distinct exchange so this test never collides with calendar rows a
  * developer already seeded for real "NSE" data via `npm run db:setup`. */
-const EXCHANGE = "TEST";
+const EXCHANGE = "CAL_TEST";
 const SEGMENT = "EQ";
 
 let store: Store;
@@ -16,10 +16,10 @@ let store: Store;
  * the service database, so it doubles as both. */
 beforeAll(async () => {
   const local = readLocalPostgresConfiguration();
-  const migrationStore = openDatabaseStore(process.env.DATABASE_URL ?? local?.adminUrl);
+  const migrationStore = openDatabaseStore(process.env.TEST_DATABASE_ADMIN_URL ?? process.env.DATABASE_URL ?? local?.adminUrl);
   try {
     await runDatabaseMigrations(migrationStore, {
-      runtimePassword: process.env.DATABASE_URL ? undefined : local?.applicationPassword,
+      runtimePassword: process.env.TEST_DATABASE_RUNTIME_PASSWORD ?? (process.env.DATABASE_URL ? undefined : local?.applicationPassword),
     });
   } finally {
     await migrationStore.close();
@@ -30,6 +30,7 @@ beforeAll(async () => {
 beforeEach(async () => {
   await store.transaction(async (query) => {
     await query("DELETE FROM market_calendar WHERE exchange=$1", [EXCHANGE]);
+    await query("DELETE FROM calendar_metadata WHERE exchange=$1", [EXCHANGE]);
     await seedNseCalendar(query, {
       from: new Date("2026-09-18T00:00:00Z"), // Fri 18th IST
       days: 6, // through Wed 23rd IST
@@ -133,6 +134,28 @@ describe("resolveSessionState", () => {
 });
 
 describe("seedNseCalendar -- real NSE holidays", () => {
+  it("preserves explicitly imported special sessions across reseeding", async () => {
+    await store.transaction(async q => {
+      await importCalendar(q, {source:"https://example.com/test-calendar",version:"test-1",days:[{
+        day:"2026-09-19",trading:true,reason:null,preOpen:"2026-09-19T12:00:00Z",open:"2026-09-19T12:15:00Z",close:"2026-09-19T13:15:00Z"
+      }]}, EXCHANGE, SEGMENT);
+      await seedNseCalendar(q, {from:new Date("2026-09-19T00:00:00Z"),days:1,exchange:EXCHANGE,segment:SEGMENT});
+    });
+    const state = await store.transaction(q=>resolveSessionState(q,new Date("2026-09-19T12:30:00Z"),EXCHANGE,SEGMENT));
+    expect(state.state).toBe("market-open");
+  });
+  it("refreshes generated dates while preserving legacy/manual rows", async () => {
+    await store.transaction(async q => {
+      await q("UPDATE market_calendar SET is_trading_day=false,managed_version='seed:old' WHERE exchange=$1 AND trading_day='2026-09-21'",[EXCHANGE]);
+      await seedNseCalendar(q,{from:new Date("2026-09-21T00:00:00Z"),days:1,exchange:EXCHANGE,segment:SEGMENT});
+      const [row]=await q<{is_trading_day:boolean}>("SELECT is_trading_day FROM market_calendar WHERE exchange=$1 AND trading_day='2026-09-21'",[EXCHANGE]);
+      expect(row?.is_trading_day).toBe(true);
+      await q("UPDATE market_calendar SET is_trading_day=false,managed_version=NULL WHERE exchange=$1 AND trading_day='2026-09-21'",[EXCHANGE]);
+      await seedNseCalendar(q,{from:new Date("2026-09-21T00:00:00Z"),days:1,exchange:EXCHANGE,segment:SEGMENT});
+      const [manual]=await q<{is_trading_day:boolean}>("SELECT is_trading_day FROM market_calendar WHERE exchange=$1 AND trading_day='2026-09-21'",[EXCHANGE]);
+      expect(manual?.is_trading_day).toBe(false);
+    });
+  });
   it("marks a real weekday exchange holiday (Republic Day 2026-01-26, a Monday) as closed, not a trading day", async () => {
     await store.transaction(async (query) => {
       await query("DELETE FROM market_calendar WHERE exchange=$1 AND trading_day='2026-01-26'", [EXCHANGE]);

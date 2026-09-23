@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { buildServer } from "../server.js";
 import { openDatabaseStore, runDatabaseMigrations, type Store } from "../database.js";
 import { readLocalPostgresConfiguration } from "../local-database.js";
-import { hashPassword, verifyPassword } from "../auth.js";
+import { hashPassword, verifyPassword, setUserPassword, createSession, resolveSession } from "../auth.js";
 import type { Query } from "../database.js";
 
 let store: Store;
@@ -35,7 +35,7 @@ describe("first-user setup", () => {
       const results = await Promise.all([1, 2].map(() => app.inject({ method: "POST", url: "/v1/auth/setup", payload })));
       expect(results.map(r => r.statusCode).sort()).toEqual([201, 409]);
       expect(saved?.email).toBe("owner@example.com");
-      expect(verifyPassword(payload.password, saved!.hash)).toBe(true);
+      expect(await verifyPassword(payload.password, saved!.hash)).toBe(true);
       expect(statements.filter(sql => sql.startsWith("INSERT"))).toHaveLength(1);
       const lock = statements.indexOf("LOCK TABLE users IN EXCLUSIVE MODE");
       expect(statements[lock + 1]).toBe("SELECT id FROM users LIMIT 1");
@@ -61,10 +61,10 @@ describe("first-user setup", () => {
 
 beforeAll(async () => {
   const local = readLocalPostgresConfiguration();
-  const migrationStore = openDatabaseStore(process.env.DATABASE_URL ?? local?.adminUrl);
+  const migrationStore = openDatabaseStore(process.env.TEST_DATABASE_ADMIN_URL ?? process.env.DATABASE_URL ?? local?.adminUrl);
   try {
     await runDatabaseMigrations(migrationStore, {
-      runtimePassword: process.env.DATABASE_URL ? undefined : local?.applicationPassword,
+      runtimePassword: process.env.TEST_DATABASE_RUNTIME_PASSWORD ?? (process.env.DATABASE_URL ? undefined : local?.applicationPassword),
     });
   } finally {
     await migrationStore.close();
@@ -77,16 +77,47 @@ afterAll(async () => {
 });
 
 async function createUser(email: string, password: string) {
+  const hash = await hashPassword(password);
   await store.transaction((query) =>
     query(
       `INSERT INTO users (email, password_hash) VALUES ($1,$2)
        ON CONFLICT (email) DO UPDATE SET password_hash=EXCLUDED.password_hash`,
-      [email, hashPassword(password)],
+      [email, hash],
     ),
   );
 }
 
 describe("POST /v1/auth/login", () => {
+  it("revokes old sessions and prevents an in-flight old-password login after reset", async () => {
+    const email = "reset-regression@example.com";
+    await setUserPassword(store, email, "old-long-password");
+    const [user] = await store.transaction(q => q<{id:string;password_hash:string}>("SELECT id,password_hash FROM users WHERE email=$1", [email]));
+    const session = await createSession(store, user!.id, user!.password_hash);
+    expect(await resolveSession(store, session.token)).not.toBeNull();
+    await setUserPassword(store, email, "new-long-password");
+    expect(await resolveSession(store, session.token)).toBeNull();
+    await expect(createSession(store, user!.id, user!.password_hash)).rejects.toThrow("Sign in again");
+  });
+  it("bounds asynchronous password work without blocking the event loop", async () => {
+    let timerRan = false;
+    const timer = new Promise<void>(resolve => setTimeout(() => { timerRan = true; resolve(); }, 0));
+    const jobs = Array.from({length:5}, () => hashPassword("test-long-password"));
+    const results = await Promise.allSettled(jobs);
+    expect(timerRan).toBe(true);
+    await timer;
+    expect(results.filter(r => r.status === "fulfilled")).toHaveLength(4);
+    expect(results.filter(r => r.status === "rejected")).toHaveLength(1);
+    expect(await verifyPassword("test-long-password", await hashPassword("test-long-password"))).toBe(true);
+  });
+  it("limits account attempts even when callers change IP addresses", async () => {
+    const app = buildServer(store);
+    try {
+      for (let i=0; i<11; i++) {
+        const response = await app.inject({method:"POST",url:"/v1/auth/login",remoteAddress:`192.0.2.${i+1}`,payload:{email:"limited@example.com",password:"invalid-password"}});
+        expect(response.statusCode).toBe(i<10 ? 401 : 429);
+      }
+    } finally { await app.close(); }
+  });
   it("rejects an unknown email with a generic message, not 'no such user'", async () => {
     const app = buildServer(store);
 

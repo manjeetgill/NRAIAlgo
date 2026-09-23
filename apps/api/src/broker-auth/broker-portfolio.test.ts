@@ -75,7 +75,7 @@ describe("fetchKotakPortfolio", () => {
     const portfolio = await fetchKotakPortfolio(SESSION, "PAPER", now, ACCOUNT_ID, fakeFetch());
 
     expect(portfolio.holdings.holdings).toEqual([
-      { provider: "kotak", accountId: ACCOUNT_ID, symbol: "TCS", quantity: 5, pledgedQuantity: null, marketValuePaise: 3800 * 5 * 100 },
+      { details: {closingPrice:3800,displaySymbol:"TCS",quantity:5}, provider: "kotak", accountId: ACCOUNT_ID, symbol: "TCS", quantity: 5, pledgedQuantity: null, marketValuePaise: 3800 * 5 * 100 },
     ]);
     expect(portfolio.holdings.availableMarginPaise).toBe(41_000_00);
     expect(portfolio.holdings.usedMarginPaise).toBe(9_000_00);
@@ -165,13 +165,24 @@ function fakeClient(): PortfolioClient {
 }
 
 describe("fetchZerodhaPortfolio", () => {
+  it("calculates daily MTM from previous close and current price, never from overall P&L", async () => {
+    const client = fakeClient();
+    const response = await client.getPositions();
+    response.net[0]!.m2m = -125.5;
+    response.net[0]!.close_price = 100;
+    client.getPositions = async () => response;
+    const result = await fetchZerodhaPortfolio("key", "token", "PAPER", new Date(), "AB1234", () => client);
+    expect(result.positions![0]).toMatchObject({ previousClose: 100, mtmPaise: -12000, pnlPaise: 38000 });
+    const missing = await fetchZerodhaPortfolio("key", "token", "PAPER", new Date(), "AB1234", () => fakeClient());
+    expect(missing.positions![0]!.mtmPaise).toBeNull();
+  });
   it("converts real holdings/positions/margins into the contract's paise-based shape, tagged with provider/account identity", async () => {
     const now = new Date("2026-09-21T10:00:00Z");
     const portfolio = await fetchZerodhaPortfolio("key", "token", "PAPER", now, "AB1234", () => fakeClient());
 
     expect(portfolio.holdings.holdings).toEqual([
       // Ten free and two pledged shares are twelve owned shares.
-      { provider: "zerodha", accountId: "AB1234", symbol: "RELIANCE", quantity: 12, pledgedQuantity: 2, marketValuePaise: 3_540_000 },
+      { details: {collateral_quantity:2}, fresh: false, priceAsOf: now.toISOString(), provider: "zerodha", accountId: "AB1234", symbol: "RELIANCE", quantity: 12, pledgedQuantity: 2, marketValuePaise: 3_540_000, ltpPaise: 295000 },
     ]);
     expect(portfolio.holdings.availableMarginPaise).toBe(38_000_00);
     expect(portfolio.holdings.usedMarginPaise).toBe(12_000_00);

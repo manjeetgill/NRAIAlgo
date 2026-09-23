@@ -4,10 +4,14 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import styles from "./login.module.css";
 import { ThemeToggle } from "@/app/components/shell/theme-toggle";
+import { AccountAccessForm } from "./account-access-form";
 
-/** First-user setup is server-gated; existing installations only expose login. */
+/** First-user setup and subsequent owner-issued account access stay server-gated. */
 export default function LoginPage() {
   const router = useRouter();
+  const [mode, setMode] = useState<"login" | "invite" | "reset">("login");
+  const [visible, setVisible] = useState(false);
+  const [retry, setRetry] = useState(0);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [state, setState] = useState<"idle" | "submitting" | "error">("idle");
@@ -30,12 +34,12 @@ export default function LoginPage() {
       }).catch(() => { if (active) setCheckFailed(true); })
       .finally(() => clearTimeout(timeout));
     return () => { active = false; clearTimeout(timeout); controller.abort(); };
-  }, []);
+  }, [retry]);
   const creating = setup?.needsSetup === true;
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    if (!setup || (creating && !setup.setupEnabled)) return;
+    if (state === "submitting" || !setup || (creating && !setup.setupEnabled)) return;
     if (creating && password !== confirmation) { setError("Passwords do not match."); return; }
     setState("submitting");
     setError(null);
@@ -68,10 +72,12 @@ export default function LoginPage() {
   return (
     <main className={styles.page}>
       <div className={styles.themeControl}><ThemeToggle /></div>
-      <form className={styles.card} onSubmit={(event) => void handleSubmit(event)}>
+      {mode !== "login" ? <AccountAccessForm mode={mode} initialEmail={email} onBack={(value, message) => { setEmail(value); setMode("login"); setPassword(""); setConfirmation(""); setError(null); setState("idle"); setVisible(false); setNotice(message ?? ""); }} /> : <form className={styles.card} onSubmit={(event) => void handleSubmit(event)}>
+        <span className={styles.eyebrow}>Private trading workspace</span>
         <h1 className={styles.title}>NRAIAlgo</h1>
         <p className={styles.subtitle}>{creating ? "Create your first workspace user" : "Sign in to your workspace"}</p>
         {!setup && <p role="status">{checkFailed ? "Cannot check setup status. Reload the page to retry." : "Checking workspace setup…"}</p>}
+        {checkFailed && <button type="button" className={styles.textButton} onClick={() => { setCheckFailed(false); setRetry(value => value + 1); }}>Retry connection</button>}
         {creating && !setup.setupEnabled && <p role="alert">Ask your deployment administrator to configure INITIAL_SETUP_TOKEN, then reload this page. Public signup is disabled.</p>}
         {notice && <p role="status">{notice}</p>}
 
@@ -90,7 +96,7 @@ export default function LoginPage() {
           <label htmlFor="login-password">Password</label>
           <input
             id="login-password"
-            type="password"
+            type={visible ? "text" : "password"}
             autoComplete={creating ? "new-password" : "current-password"}
             minLength={creating ? 12 : undefined}
             maxLength={creating ? 256 : undefined}
@@ -99,6 +105,8 @@ export default function LoginPage() {
             onChange={(event) => setPassword(event.target.value)}
           />
         </div>
+
+        <button type="button" className={styles.textButton} aria-pressed={visible} onClick={() => setVisible(!visible)}>{visible ? "Hide password" : "Show password"}</button>
 
         {creating && <>
           <div className={styles.field}>
@@ -121,7 +129,12 @@ export default function LoginPage() {
         <button type="submit" className={styles.submit} disabled={state === "submitting" || !setup || (creating && !setup.setupEnabled)}>
           {state === "submitting" ? (creating ? "Creating user…" : "Signing in…") : (creating ? "Create user" : "Sign in")}
         </button>
-      </form>
+        {!creating && <nav className={styles.accessLinks} aria-label="Account access">
+          <button type="button" className={styles.textButton} disabled={state === "submitting"} onClick={() => { setPassword(""); setMode("reset"); }}>Forgot password?</button>
+          <button type="button" className={styles.textButton} disabled={state === "submitting"} onClick={() => { setPassword(""); setMode("invite"); }}>Use an owner-issued access code</button>
+        </nav>}
+        <p className={styles.footnote}>Broker credentials are connected separately after sign-in. Never enter your broker password here.</p>
+      </form>}
     </main>
   );
 }

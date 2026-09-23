@@ -3,6 +3,16 @@ import { OVERVIEW_SNAPSHOT_FIXTURES } from '@nraialgo/contracts';
 import { buildOverviewSnapshot, type SnapshotDeps } from './build-overview-snapshot.js';
 
 describe('multi-broker dashboard composition',()=>{
+ it('starts both broker reads before either completes',async()=>{
+  const fixture=OVERVIEW_SNAPSHOT_FIXTURES['market-open'];
+  let release!:()=>void;
+  const gate=new Promise<void>(resolve=>{release=resolve;});
+  const started:string[]=[];
+  const portfolio={holdings:fixture.holdings.data!,pnl:fixture.pnl.data!,positions:[]};
+  const deps:SnapshotDeps={fetchNseIndexCloses:async()=>[],fetchZerodhaPortfolio:async()=>{started.push('zerodha');await gate;return portfolio;},fetchKotakPortfolio:async()=>{started.push('kotak');await gate;return portfolio;}};
+  const pending=buildOverviewSnapshot({session:fixture.session,zerodha:{apiKey:'test',accessToken:'test',accountId:'Z'},kotak:{session:{token:'test',sid:'test',baseUrl:'https://example.com'},accountId:'K'}},new Date(fixture.generatedAt),fixture.scope,deps);
+  try { expect(started).toEqual(['zerodha','kotak']); } finally { release(); await pending; }
+ });
  it('includes both broker positions and marks partial reads degraded',async()=>{
   const fixture=OVERVIEW_SNAPSHOT_FIXTURES['market-open'];
   const now=new Date(fixture.generatedAt);
@@ -15,7 +25,7 @@ describe('multi-broker dashboard composition',()=>{
   const failed=await buildOverviewSnapshot(inputs,now,fixture.scope,{...deps,fetchKotakPortfolio:async()=>{throw Error('unavailable');}});
   expect(failed.positions?.status).toBe('degraded');
   expect(failed.pnl.status).toBe('degraded');
-  expect(failed.brokerReconciliation).toEqual({zerodha:{accountId:'Z',status:'confirmed',asOf:now.toISOString()},kotak:{accountId:'K',status:'failed',asOf:null}});
+  expect(failed.brokerReconciliation).toEqual({zerodha:{accountId:'Z',status:'confirmed',asOf:fixture.holdings.data!.accountAsOf},kotak:{accountId:'K',status:'failed',asOf:null}});
   const kotakOnly=await buildOverviewSnapshot(inputs,now,fixture.scope,{...deps,fetchZerodhaPortfolio:async()=>{throw Error('unavailable');}});
   expect(kotakOnly.positions?.status).toBe('degraded');
   expect(kotakOnly.brokerReconciliation?.kotak?.status).toBe('confirmed');

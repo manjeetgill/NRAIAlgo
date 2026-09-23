@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { Store } from "../database.js";
 import type { credentialVault } from "../credential-vault.js";
 import { requireAuth } from "./auth.js";
+import { iciciCredentials } from "../broker-auth/icici.js";
 
 const zerodhaCredentials = z
   .object({
@@ -19,7 +20,7 @@ const kotakCredentials = z
   })
   .strict();
 
-const PROVIDER_SCHEMAS = { zerodha: zerodhaCredentials, kotak: kotakCredentials } as const;
+const PROVIDER_SCHEMAS = { zerodha: zerodhaCredentials, kotak: kotakCredentials, icici: iciciCredentials } as const;
 type Provider = keyof typeof PROVIDER_SCHEMAS;
 
 /**
@@ -44,7 +45,7 @@ export function brokerCredentialsRoutes(store: Store, vault: ReturnType<typeof c
       { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } },
       async (request, reply) => {
         const provider = request.params.provider;
-        if (!(provider in PROVIDER_SCHEMAS)) {
+        if (!Object.hasOwn(PROVIDER_SCHEMAS, provider)) {
           return reply.badRequest("Unknown broker provider.");
         }
         const body = PROVIDER_SCHEMAS[provider as Provider].safeParse(request.body);
@@ -54,15 +55,17 @@ export function brokerCredentialsRoutes(store: Store, vault: ReturnType<typeof c
         const workspaceId = request.auth!.workspaceId;
         const context = `${workspaceId}:${provider}`;
         const ciphertext = vault.seal(context, body.data);
-        await store.transaction((query) =>
-          query(
+        await store.transaction(async (query) => {
+          await query(
             `INSERT INTO broker_app_credentials (workspace_id, provider, ciphertext, updated_at)
              VALUES ($1,$2,$3,now())
              ON CONFLICT (workspace_id, provider)
              DO UPDATE SET ciphertext=EXCLUDED.ciphertext, updated_at=now()`,
             [workspaceId, provider, ciphertext],
-          ),
-        );
+          );
+          // An old session must never be paired with a newly configured broker app.
+          await query("DELETE FROM broker_sessions WHERE workspace_id=$1 AND provider=$2", [workspaceId, provider]);
+        });
         return reply.code(204).send();
       },
     );

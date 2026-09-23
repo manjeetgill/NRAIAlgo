@@ -4,7 +4,7 @@
      side by side) that needs the full available width to lay out
      correctly, not a narrow centered reading column. */
   width: 100%;
-  padding: 20px 20px 64px;
+  padding: 10px 12px 48px;
 }
 
 .mockNotice {

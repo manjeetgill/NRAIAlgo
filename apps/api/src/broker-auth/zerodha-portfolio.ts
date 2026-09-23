@@ -33,7 +33,7 @@ export async function fetchZerodhaPortfolio(
    * real account identity, kept on every holding row so a combined
    * multi-broker list never collapses two brokers' "RELIANCE" into one key. */
   accountId: string,
-  factory: (apiKey: string) => PortfolioClient = (key) => new KiteConnect({ api_key: key }),
+  factory: (apiKey: string) => PortfolioClient = (key) => new KiteConnect({ api_key: key, timeout: 8000 }),
   timeoutMs = 8000,
 ): Promise<ZerodhaPortfolio> {
   const client = factory(apiKey);
@@ -45,14 +45,27 @@ export async function fetchZerodhaPortfolio(
   );
 
   const holdings = holdingsRaw.map((holding) => ({
+    details: Object.fromEntries(["product","used_quantity","t1_quantity","realised_quantity","authorised_quantity","opening_quantity","collateral_quantity","collateral_type","discrepancy","close_price","pnl","day_change","day_change_percentage"].filter(key => ["string","number","boolean"].includes(typeof (holding as unknown as Record<string,unknown>)[key])).map(key => [key,(holding as unknown as Record<string,string|number|boolean>)[key]!])),
     provider: "zerodha",
     accountId,
     symbol: holding.tradingsymbol,
+    ...(Number.isSafeInteger(holding.instrument_token) && holding.instrument_token > 0 ? { instrumentToken: holding.instrument_token } : {}),
+    fresh: false,
+    priceAsOf: now.toISOString(),
     // Pledged shares remain owned but are excluded from Kite's free quantity.
     // Report total owned units; pledgedQuantity identifies the pledged subset.
     quantity: holding.quantity + (holding.collateral_quantity ?? 0),
     pledgedQuantity: holding.collateral_quantity ?? null,
     marketValuePaise: rupeesToPaise(holding.last_price * (holding.quantity + (holding.collateral_quantity ?? 0))),
+    ...(Number.isFinite(holding.average_price) && holding.average_price > 0 ? {
+      averagePaise: rupeesToPaise(holding.average_price),
+      investedPaise: rupeesToPaise(holding.average_price * (holding.quantity + (holding.collateral_quantity ?? 0))),
+      unrealizedPaise: Number.isFinite(holding.last_price) && holding.last_price > 0 ? rupeesToPaise((holding.last_price - holding.average_price) * (holding.quantity + (holding.collateral_quantity ?? 0))) : null,
+    } : {}),
+    ...(holding.exchange ? { exchange: holding.exchange } : {}),
+    ...(holding.isin ? { isin: holding.isin } : {}),
+    ltpPaise: Number.isFinite(holding.last_price) && holding.last_price > 0 ? rupeesToPaise(holding.last_price) : null,
+    ...(Number.isFinite(holding.close_price) && holding.close_price > 0 && holding.last_price > 0 ? { dayPnlPaise: rupeesToPaise((holding.last_price - holding.close_price) * (holding.quantity + (holding.collateral_quantity ?? 0))) } : {}),
   }));
 
   const equity = margins.equity;
@@ -74,13 +87,21 @@ export async function fetchZerodhaPortfolio(
   const nowIso = new Date(Math.max(now.getTime(), Date.now())).toISOString();
 
   return {
-    positions: positions.net.filter((position) => position.quantity !== 0).map((position) => PositionRowSchema.parse({
+    positions: positions.net.filter((position) => position.quantity !== 0).map((position) => {
+      const previousClose = Number.isFinite(position.close_price) && position.close_price > 0 ? position.close_price : null;
+      const dailyMtm = previousClose !== null && Number.isFinite(position.last_price) && position.last_price > 0
+        ? rupeesToPaise((position.last_price - previousClose) * position.quantity * position.multiplier)
+        : null;
+      return PositionRowSchema.parse({
+      details: Object.fromEntries(["overnight_quantity","close_price","value","pnl","m2m","realised","unrealised","buy_quantity","buy_price","buy_value","buy_m2m","day_buy_quantity","day_buy_price","day_buy_value","sell_quantity","sell_price","sell_value","sell_m2m","day_sell_quantity","day_sell_price","day_sell_value"].filter(key => Number.isFinite((position as unknown as Record<string,unknown>)[key])).map(key => [key,(position as unknown as Record<string,number>)[key]!])),
       provider: "zerodha", accountId, instrumentToken: position.instrument_token,
       exchange: position.exchange, symbol: position.tradingsymbol, product: position.product,
       quantity: position.quantity, multiplier: position.multiplier, averagePrice: position.average_price,
-      lastPrice: position.last_price, pnlPaise: rupeesToPaise(position.realised + position.unrealised),
+      lastPrice: position.last_price, previousClose, pnlPaise: rupeesToPaise(position.realised + position.unrealised),
+      mtmPaise: dailyMtm,
       asOf: nowIso, fresh: false,
-    })),
+      });
+    }),
     holdings: {
       holdings,
       collateralPaise,

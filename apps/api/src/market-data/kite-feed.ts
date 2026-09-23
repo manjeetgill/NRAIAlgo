@@ -107,8 +107,9 @@ export function createKiteFeed(credentials: ZerodhaInputs, receive: (message: Fe
     receive({ type: "state", state: "unavailable", retryable });
     if (streamingSince !== undefined && Date.now() - streamingSince >= 60_000) attempts = 0;
     streamingSince = undefined;
-    if (!retryable || attempts >= 10) return;
-    retry = setTimeout(() => { retry = undefined; connect(); }, Math.min(30_000, 1000 * 2 ** attempts++));
+    if (!retryable) return;
+    const delay = attempts >= 10 ? 300_000 : Math.min(30_000, 1000 * 2 ** attempts++);
+    retry = setTimeout(() => { retry = undefined; connect(); }, delay);
     retry.unref?.();
   }
   function connect() {

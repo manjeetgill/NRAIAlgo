@@ -47,7 +47,14 @@ export function parseAnnouncements(xml: string, now = new Date()): AlphaWireItem
     const timestamp = Date.parse(nseDate ? `${rawDate} +0530` : hasZone ? rawDate : "");
     const publishedAt = Number.isFinite(timestamp) && timestamp <= now.getTime() + 300_000 ? new Date(timestamp).toISOString() : null;
     if (title && url) {
-      const id = createHash("sha256").update(JSON.stringify([title, url, publishedAt])).digest("hex");
+      // Deliberately excludes url: NSE itself sometimes files the exact same
+      // disclosure twice under two different PDF attachments a few seconds
+      // apart (verified live -- two "Outcome of Board Meeting" items for the
+      // same company, same title, same pubDate, different /corporate/...pdf
+      // link). Deduping on [title, publishedAt] collapses that correctly; a
+      // genuinely different announcement essentially never shares both an
+      // identical title string and an identical to-the-second timestamp.
+      const id = createHash("sha256").update(JSON.stringify([title, publishedAt])).digest("hex");
       items.push({ id, title, url, source: "NSE announcements", category: "Announcements", publishedAt, receivedAt: now.toISOString() });
     }
     fields = undefined;

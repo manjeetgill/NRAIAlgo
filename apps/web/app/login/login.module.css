@@ -12,10 +12,10 @@
 
 .card {
   width: 100%;
-  max-width: 360px;
+  max-width: 440px;
   background: var(--color-surface-subtle);
   border: 1px solid var(--color-border-subtle);
-  border-radius: 8px;
+  border-radius: 16px;
   padding: 32px 28px;
   display: flex;
   flex-direction: column;
@@ -73,3 +73,13 @@
   opacity: 0.6;
   cursor: not-allowed;
 }
+
+.eyebrow { color: var(--color-text-muted); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.12em; }
+.textButton { border: 0; padding: 4px 0; background: transparent; color: var(--color-accent-primary, #60a5fa); cursor: pointer; font: inherit; font-size: 0.85rem; text-align: left; }
+.textButton:disabled { opacity: 0.6; cursor: not-allowed; }
+.accessLinks { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; border-top: 1px solid var(--color-border-subtle); padding-top: 16px; }
+.help { background: var(--color-surface-base); border: 1px solid var(--color-border-subtle); padding: 12px; border-radius: 8px; color: var(--color-text-muted); font-size: 0.8rem; line-height: 1.6; }
+.help p { margin-bottom: 0; }
+.fields { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.footnote { margin: 0; font-size: 0.75rem; line-height: 1.5; color: var(--color-text-muted); }
+.card button:focus-visible, .field input:focus-visible { outline: 2px solid var(--color-accent-primary, #60a5fa); outline-offset: 3px; }

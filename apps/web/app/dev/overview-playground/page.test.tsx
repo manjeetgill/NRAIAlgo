@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { OVERVIEW_SNAPSHOT_FIXTURES } from "@nraialgo/contracts";
 import OverviewPlaygroundPage from "./page";
@@ -9,11 +9,10 @@ vi.mock("@/app/app/overview/use-overview-snapshot", () => ({ useOverviewSnapshot
 
 describe("legacy overview playground", () => {
   afterEach(() => { vi.unstubAllEnvs(); notFoundMock.mockClear(); });
-  it("uses the account page and layout selector instead of example snapshots", () => {
+  it("uses the real account page without production simulation controls", () => {
     render(<OverviewPlaygroundPage />);
-    fireEvent.click(screen.getByRole("button", { name: "Weekend / holiday" }));
-    expect(screen.getByRole("heading", { name: "Weekend / holiday" })).toBeInTheDocument();
-    expect(screen.getByText(/Actual server session: Market open/)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Market open" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Weekend / holiday" })).not.toBeInTheDocument();
     expect(screen.queryByText(/fixed example data/)).not.toBeInTheDocument();
     expect(screen.getByText("NRAIAlgo")).toBeInTheDocument();
   });

@@ -9,17 +9,40 @@ import { TemporaryViewSelector } from "./temporary-view-selector";
 // future caller (the production page's live fetch, the playground's
 // fixtures, a future test) renders the exact same way.
 describe("OverviewScreen", () => {
-  it("renders real position quantities, freshness and broker orders without enabling exits", () => {
+  it("retains confirmed market-open P&L after a failed refresh without showing partial margin totals", () => {
+    const snapshot = structuredClone(OVERVIEW_SNAPSHOT_FIXTURES["market-open"]);
+    snapshot.configuredProviders = ["zerodha"];
+    snapshot.pnl = { ...snapshot.pnl, status: "available", reason: null, asOf: snapshot.generatedAt, data: { ...snapshot.pnl.data!, grossPaise: 123456 } };
+    const { rerender } = render(<OverviewScreen snapshot={snapshot} />);
+    const card = screen.getByRole("region", { name: "Session P&L Breakdown" });
+    expect(within(card).getAllByText("+₹1,234.56").length).toBeGreaterThan(0);
+    rerender(<OverviewScreen snapshot={{ ...snapshot, pnl: { ...snapshot.pnl, status: "unavailable", data: null, reason: "Refresh failed" } }} />);
+    expect(within(card).getAllByText("+₹1,234.56")[0]).toHaveTextContent("+₹1,234.56*");
+    expect(within(card).getAllByText("+₹1,234.56")[0]).toHaveAttribute("data-tone", "positive");
+    expect(screen.queryByText(/Known margin subtotal/)).not.toBeInTheDocument();
+  });
+
+  it("shows a locked Exit chip per position only on an individual broker dashboard", () => {
     const snapshot: OverviewSnapshot = structuredClone(OVERVIEW_SNAPSHOT_FIXTURES["market-open"]);
     snapshot.positions = { status: "available", source: "zerodha-positions", asOf: snapshot.generatedAt, version: 1, reason: null, data: [{ provider: "zerodha", accountId: "AB", instrumentToken: 1, exchange: "NFO", symbol: "TEST-FUT", product: "NRML", quantity: -25, multiplier: 1, averagePrice: 100, lastPrice: 98, pnlPaise: 5000, asOf: snapshot.generatedAt, fresh: true }] };
     snapshot.brokerOrders = { status: "available", source: "zerodha-order-book", asOf: snapshot.generatedAt, version: 1, reason: null, data: [{ orderId: "ORDER-123", symbol: "TEST-FUT", exchange: "NFO", product: "NRML", side: "SELL", status: "OPEN", quantity: 25, filledQuantity: 10, averagePrice: 100 }] };
     render(<OverviewScreen snapshot={snapshot} />);
     expect(screen.getByText("-25")).toBeInTheDocument();
+    expect(screen.getByText("-25")).toHaveAttribute("data-tone", "negative");
+    expect(within(screen.getByRole("region", { name: "Live Open Positions" })).getByText("SELL")).toHaveAttribute("data-tone", "negative");
+    expect(within(screen.getByRole("region", { name: "Live Open Positions" })).getByLabelText("Broker: Zerodha")).toHaveAttribute("data-broker", "zerodha");
     expect(screen.getByText(/Live tick/)).toBeInTheDocument();
     expect(screen.getByText("ORDER-123")).toBeInTheDocument();
     expect(screen.getByText("10 / 25")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Exit" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Exit" })).not.toBeInTheDocument();
     expect(screen.queryByText("Awaiting position-level data")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Zerodha" }));
+    expect(screen.getByText("-25")).toHaveAttribute("data-tone", "negative");
+    expect(within(screen.getByRole("region", { name: "Live Open Positions" })).getByText("SELL")).toHaveAttribute("data-tone", "negative");
+    expect(within(screen.getByRole("region", { name: "Live Open Positions" })).queryByLabelText("Broker: Zerodha")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Exit TEST-FUT" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "All Brokers" }));
+    expect(screen.queryByRole("button", { name: "Exit TEST-FUT" })).not.toBeInTheDocument();
   });
 
   it("keeps execution commands locked even when all readiness checks pass", () => {
@@ -52,7 +75,20 @@ describe("OverviewScreen", () => {
     render(<OverviewScreen snapshot={OVERVIEW_SNAPSHOT_FIXTURES["market-open"]} />);
 
     expect(screen.getByText("NIFTY 50")).toBeInTheDocument();
-    expect(screen.getAllByText(/Gross/).length).toBeGreaterThan(0);
+    expect(screen.getByText("Reported / estimated position P&L · Excluding MCX")).toBeInTheDocument();
+  });
+
+  it("keeps the same market-index strip on consolidated and individual broker dashboards", () => {
+    render(<OverviewScreen snapshot={OVERVIEW_SNAPSHOT_FIXTURES["market-open"]} />);
+
+    for (const dashboard of ["All Brokers", "Zerodha", "Kotak", "ICICI"]) {
+      fireEvent.click(screen.getByRole("button", { name: dashboard }));
+      const indices = screen.getByRole("region", { name: "Market indices" });
+      expect(within(indices).getByText("NIFTY 50")).toBeInTheDocument();
+      expect(within(indices).getByText("BANKNIFTY")).toBeInTheDocument();
+      expect(within(indices).getByText("INDIA VIX")).toBeInTheDocument();
+      expect(within(indices).getAllByText("LIVE")).toHaveLength(3);
+    }
   });
 
   it("shows an honest reason for a panel with no data source, never a fabricated value", () => {
@@ -65,6 +101,7 @@ describe("OverviewScreen", () => {
     const fixture = OVERVIEW_SNAPSHOT_FIXTURES["market-open"];
     const snapshot = {
       ...fixture,
+      configuredProviders: ["zerodha"],
       pnl: {
         ...fixture.pnl,
         data: fixture.pnl.data && { ...fixture.pnl.data, chargesPaise: null, netPaise: null },
@@ -74,8 +111,8 @@ describe("OverviewScreen", () => {
     render(<OverviewScreen snapshot={snapshot} />);
 
     expect(screen.getByText(/Charges:/)).toBeInTheDocument();
-    expect(screen.getByText("Pending")).toBeInTheDocument();
-    expect(screen.getByText(/Net P&L: Unavailable/)).toBeInTheDocument();
+    expect(screen.getByText("Metric details *")).toBeInTheDocument();
+    expect(screen.getByText(/net P&L requires reconciled charges/)).toBeInTheDocument();
   });
 
   it("keys each holding row by provider+account+symbol, and shows which provider it's from", () => {
@@ -98,7 +135,7 @@ describe("OverviewScreen", () => {
 
     render(<OverviewScreen snapshot={snapshot} />);
 
-    expect(screen.getByText(/totals include only zerodha/)).toBeInTheDocument();
+    expect(screen.getAllByText(/totals include only zerodha/).length).toBeGreaterThan(0);
     expect(screen.getByText("Partial")).toBeInTheDocument();
     // The data that did succeed is still rendered, not hidden behind the warning.
     fireEvent.click(screen.getByRole("button", { name: /Allocation details/ }));
@@ -157,7 +194,7 @@ describe("closed market layouts", () => {
     render(<OverviewScreen snapshot={OVERVIEW_SNAPSHOT_FIXTURES["weekend-holiday"]} />);
     expect(screen.getByText("2026-09-22")).toBeInTheDocument();
     expect(screen.getByText("Weekly equity history unavailable")).toBeInTheDocument();
-    expect(screen.getByText(/Reported period: Last completed session/)).toBeInTheDocument();
+    expect(screen.getByText(/Reported period: Unavailable/)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Weekend Optimizations" })).toBeInTheDocument();
   });
 

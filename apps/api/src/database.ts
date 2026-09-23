@@ -6,7 +6,7 @@ import { readLocalPostgresConfiguration } from "./local-database.js";
 import pg from "pg";
 import { databaseTlsOptions } from "./production-config.js";
 
-export const SCHEMA_VERSION = 8;
+export const SCHEMA_VERSION = 12;
 
 type Parameter = string | number | boolean | null;
 export type Query = <T = Record<string, unknown>>(
@@ -221,6 +221,44 @@ export async function runDatabaseMigrations(
       await query("CREATE TABLE alpha_wire_poll_state (provider TEXT PRIMARY KEY, next_poll_at TIMESTAMPTZ NOT NULL)");
       await query("INSERT INTO schema_migrations (version) VALUES (8)");
     }
+    if (!(await query("SELECT version FROM schema_migrations WHERE version=9")).length) {
+      // Legacy rows remain unowned: never overwrite a possible manual override.
+      await query("ALTER TABLE market_calendar ADD COLUMN managed_version TEXT");
+      await query("INSERT INTO schema_migrations (version) VALUES (9)");
+    }
+    if (!(await query("SELECT version FROM schema_migrations WHERE version=10")).length) {
+      await query(`CREATE TABLE account_access_codes (
+        token_hash CHAR(64) PRIMARY KEY,
+        email VARCHAR(254) NOT NULL,
+        purpose TEXT NOT NULL CHECK (purpose IN ('invite','reset')),
+        password_version TEXT,
+        expires_at TIMESTAMPTZ NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        UNIQUE(email,purpose)
+      )`);
+      await query("INSERT INTO schema_migrations (version) VALUES (10)");
+    }
+    if (!(await query("SELECT version FROM schema_migrations WHERE version=11")).length) {
+      // One row per workspace per completed trading day -- see
+      // session-performance.ts. gross_paise only: chargesPaise is still
+      // unknown for every provider, so there is no true net figure to
+      // record either (same reasoning as panels.ts's PnlDataSchema).
+      await query(`CREATE TABLE session_pnl_history (
+        workspace_id VARCHAR(64) NOT NULL,
+        trading_day DATE NOT NULL,
+        gross_paise BIGINT NOT NULL,
+        recorded_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        PRIMARY KEY (workspace_id, trading_day)
+      )`);
+      await query("INSERT INTO schema_migrations (version) VALUES (11)");
+    }
+    if (!(await query("SELECT version FROM schema_migrations WHERE version=12")).length) {
+      // Rows recorded before coverage was enforced are preserved for audit,
+      // but excluded from statistics until a fully reconciled snapshot
+      // explicitly replaces them.
+      await query("ALTER TABLE session_pnl_history ADD COLUMN coverage_key TEXT");
+      await query("INSERT INTO schema_migrations (version) VALUES (12)");
+    }
     if (options.runtimePassword || options.runtimeRole) {
       if (options.runtimeRole && options.runtimeRole !== "nraialgo_app") throw new Error("Unsupported runtime database role");
       const password = options.runtimePassword;
@@ -245,12 +283,15 @@ export async function runDatabaseMigrations(
       await query("REVOKE ALL ON schema_migrations FROM nraialgo_app");
       await query("GRANT USAGE ON SCHEMA public TO nraialgo_app");
       await query(
-        "GRANT SELECT,INSERT,UPDATE,DELETE ON market_calendar,broker_app_credentials,broker_sessions,users,sessions,zerodha_oauth_state,calendar_metadata,alpha_wire_items,alpha_wire_poll_state TO nraialgo_app",
+        "GRANT SELECT,INSERT,UPDATE,DELETE ON market_calendar,broker_app_credentials,broker_sessions,users,sessions,zerodha_oauth_state,calendar_metadata,alpha_wire_items,alpha_wire_poll_state,session_pnl_history TO nraialgo_app",
       );
       // Read-only: the running API reports the schema version (/v1/readiness)
       // but must never itself apply a migration -- INSERT/UPDATE/DELETE here
       // stay ungranted deliberately.
       await query("GRANT SELECT ON schema_migrations TO nraialgo_app");
+      // Only the offline administrator may issue codes; the API can redeem them.
+      await query("REVOKE ALL ON account_access_codes FROM nraialgo_app");
+      await query("GRANT SELECT,DELETE ON account_access_codes TO nraialgo_app");
     }
   });
 }

@@ -1,11 +1,36 @@
+"use client";
+
+import { useState, useMemo } from "react";
 import type { MarketState, OverviewSnapshot } from "@nraialgo/contracts";
+import { BrokerFilter } from "./broker-filter";
 import { PanelCard } from "./panel-card";
 import { formatPaise, formatTimestamp } from "./format";
 import { STATE_LABEL } from "./session-labels";
 import styles from "./overview.module.css";
-import { MarketOpenScreen } from "./market-open-screen";
+import { MarketOpenView } from "./market-open-screen";
 import { MarketClosedScreen } from "./market-closed-screen";
 import { PreOpenScreen } from "./pre-open-screen";
+import { AccountDetails } from "./account-details";
+import { brokerView, selectedProviders, hasCoreCoverage, type BrokerView } from "./broker-view";
+import { useIciciAccount, iciciHoldings } from "./use-icici-account";
+import { withIciciOverviewStatus } from "./icici-overview-status";
+import { useShellOverview } from "@/app/components/shell/overview-context";
+
+function NonLiveDashboard({ snapshot, layout, layoutOnly = false, icici }: { snapshot: OverviewSnapshot; layout: "pre-open" | "after-close" | "weekend-holiday"; layoutOnly?: boolean; icici: ReturnType<typeof useIciciAccount> }) {
+  const [selectedBroker, setSelectedBroker] = useState<BrokerView>("all");
+  const scoped = { ...brokerView(snapshot, selectedBroker) };
+  const includeIcici = selectedProviders(snapshot, selectedBroker).includes("icici");
+  if (includeIcici) scoped.pnl = { ...scoped.pnl, status: "unavailable", data: null, reason: scoped.pnl.reason ?? "Consolidated session P&L withheld: a comparable ICICI session total is not supplied." };
+  const accountHoldings = {
+    rows: [...(scoped.holdings.data?.holdings ?? []), ...(includeIcici ? iciciHoldings(icici.account) : [])],
+    complete: hasCoreCoverage(snapshot, selectedBroker, "holdings") && (!includeIcici || (!icici.stale && icici.account?.sections.portfolioholdings?.status === "available")),
+  };
+  return <>
+    <BrokerFilter value={selectedBroker} onChange={setSelectedBroker} />
+    {layout === "pre-open" ? <PreOpenScreen snapshot={scoped} layoutOnly={layoutOnly} accountHoldings={accountHoldings} /> : <MarketClosedScreen snapshot={scoped} {...(layoutOnly ? { layout } : {})} accountHoldings={accountHoldings} />}
+    <AccountDetails iciciStale={icici.stale} snapshot={scoped} broker={selectedBroker} account={icici.account} status={icici.status} />
+  </>;
+}
 
 export interface OverviewScreenProps {
   snapshot: OverviewSnapshot;
@@ -20,21 +45,24 @@ export interface OverviewScreenProps {
  * component renders identically whether it's fed by the production page's
  * live fetch or the dev playground's labeled fixtures.
  */
-export function OverviewScreen({ snapshot, layout }: OverviewScreenProps) {
+export function OverviewScreen({ snapshot: baseSnapshot, layout, stale = false }: OverviewScreenProps & { stale?: boolean }) {
+  const icici = useIciciAccount();
+  const snapshot = useMemo(() => withIciciOverviewStatus(baseSnapshot, icici.account, icici.stale, icici.live),[baseSnapshot,icici.account,icici.stale,icici.live]);
+  useShellOverview(snapshot, stale);
   const session = snapshot.session;
   // Select presentation without modifying the authoritative session or data.
-  if (layout === "pre-open") return <PreOpenScreen snapshot={snapshot} layoutOnly />;
-  if (layout === "market-open") return <MarketOpenScreen snapshot={snapshot} layoutOnly />;
-  if (layout === "after-close" || layout === "weekend-holiday") return <MarketClosedScreen snapshot={snapshot} layout={layout} />;
+  if (layout === "pre-open") return <NonLiveDashboard snapshot={snapshot} layout="pre-open" layoutOnly icici={icici} />;
+  if (layout === "market-open") return <MarketOpenView snapshot={snapshot} layoutOnly icici={icici} />;
+  if (layout === "after-close" || layout === "weekend-holiday") return <NonLiveDashboard snapshot={snapshot} layout={layout} layoutOnly icici={icici} />;
   if (session.data?.state === "pre-open" && session.data.calendarValid) {
-    return <PreOpenScreen snapshot={snapshot} />;
+    return <NonLiveDashboard snapshot={snapshot} layout="pre-open" icici={icici} />;
   }
 
   if (session.data?.state === "market-open" && session.data.calendarValid) {
-    return <MarketOpenScreen snapshot={snapshot} />;
+    return <MarketOpenView snapshot={snapshot} icici={icici} />;
   }
   if (session.data?.calendarValid && (session.data.state === "after-close" || session.data.state === "weekend-holiday")) {
-    return <MarketClosedScreen snapshot={snapshot} />;
+    return <NonLiveDashboard snapshot={snapshot} layout={session.data.state} icici={icici} />;
   }
 
   return (

@@ -12,6 +12,7 @@ import type { Store } from "./database.js";
 import { credentialVault } from "./credential-vault.js";
 import type { exchangeZerodhaRequestToken } from "./broker-auth/zerodha.js";
 import type { kotakDailyLogin } from "./broker-auth/kotak.js";
+import type { iciciLogin, iciciAccount } from "./broker-auth/icici.js";
 
 /**
  * Builds a Fastify instance without binding a port.
@@ -31,6 +32,8 @@ export function buildServer(
   brokerAuthDeps: {
     exchangeZerodhaRequestToken?: typeof exchangeZerodhaRequestToken;
     kotakDailyLogin?: typeof kotakDailyLogin;
+    iciciLogin?: typeof iciciLogin;
+    iciciAccount?: typeof iciciAccount;
   } = {},
 ): FastifyInstance {
   const app = Fastify({
@@ -50,6 +53,17 @@ export function buildServer(
 
   app.register(sensible);
   app.register(cookie);
+  // Cookie-authenticated mutations must not be triggered by another website.
+  // Non-browser clients without Origin remain supported; browser cross-site
+  // requests are rejected even when their body is otherwise valid JSON.
+  app.addHook("onRequest", async (request, reply) => {
+    if (["GET", "HEAD", "OPTIONS"].includes(request.method)) return;
+    const origin = request.headers.origin;
+    const expected = process.env.FRONTEND_ORIGIN ?? "http://localhost:3010";
+    if (request.headers["sec-fetch-site"] === "cross-site" || (origin !== undefined && origin !== expected)) {
+      return reply.code(403).send({ message: "Cross-origin request rejected." });
+    }
+  });
   // Global backstop, keyed by IP (no authenticated principal exists yet to
   // key on instead). Login/credential routes set their own much tighter
   // per-route limits below -- this default just caps ordinary polling/reads.

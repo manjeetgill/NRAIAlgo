@@ -1,0 +1,46 @@
+name: nraialgo-db-browser
+services:
+  pgadmin:
+    image: dpage/pgadmin4:9.18
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD_FILE: /run/secrets/login_password
+      PGADMIN_DISABLE_POSTFIX: "1"
+      PGADMIN_ENABLE_TLS: "1"
+      PGADMIN_LISTEN_PORT: "5050"
+      PGADMIN_CONFIG_SESSION_COOKIE_SECURE: "True"
+      PGADMIN_CONFIG_SESSION_COOKIE_NAME: "'nraialgo_pgadmin_session'"
+      PGADMIN_CONFIG_LOGIN_BANNER: "'Private NRAIAlgo database browser — read-only connection'"
+      GUNICORN_THREADS: "4"
+      GUNICORN_ACCESS_LOGFILE: /dev/null
+    ports: ["127.0.0.1:8444:5050"]
+    networks: [staging]
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+      - ./servers.json:/pgadmin4/servers.json:ro
+      - ./secrets/server.crt:/certs/server.cert:ro
+      - ./secrets/server.key:/certs/server.key:ro
+      - ./secrets/staging-ca.crt:/certs/ca.crt:ro
+      - ./secrets/db.crt:/var/lib/pgadmin/storage/admin_example.com/db.crt:ro
+      - ./secrets/pgpass:/var/lib/pgadmin/storage/admin_example.com/.pgpass:ro
+    secrets: [login_password]
+    restart: unless-stopped
+    mem_limit: 384m
+    security_opt: [no-new-privileges:true]
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    healthcheck:
+      test: [CMD, /venv/bin/python3, -c, "import ssl,urllib.request; urllib.request.urlopen('https://localhost:5050/misc/ping',context=ssl.create_default_context(cafile='/certs/ca.crt'),timeout=5)"]
+      interval: 15s
+      timeout: 8s
+      retries: 10
+      start_period: 60s
+networks:
+  staging:
+    external: true
+    name: nraialgo-staging_default
+volumes:
+  pgadmin_data:
+secrets:
+  login_password: { file: ./secrets/login-password }

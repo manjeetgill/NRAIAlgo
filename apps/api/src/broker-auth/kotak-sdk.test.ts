@@ -18,9 +18,10 @@ describe('SDK IPC errors',()=>{
   });
   it('terminates a hung process on deadline and ignores a late result',async()=>{
     vi.useFakeTimers();const stop=vi.fn();let receive:(value:unknown)=>void=()=>{};
-    const promise=kotakSdkRequest('portfolio',{},(_op,_data,callback)=>{receive=callback;return{send:vi.fn(),stop};});
+    const promise=kotakSdkRequest('portfolio',{},(_op,_data,callback)=>{receive=callback;return{send:vi.fn(),stop};},8000);
     const assertion=expect(promise).rejects.toMatchObject({code:'SDK_TIMEOUT'});
-    await vi.advanceTimersByTimeAsync(30000);await assertion;
+    await vi.advanceTimersByTimeAsync(7999);expect(stop).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);await assertion;
     receive({result:{}});expect(stop).toHaveBeenCalledOnce();expect(vi.getTimerCount()).toBe(0);
   });
   it('preserves a missing runtime launch failure',async()=>{
@@ -54,7 +55,7 @@ describe('production Kotak SDK routing',()=>{
     const session={token:'t',sid:'s',baseUrl:'https://mis.kotaksecurities.com'};
     vi.mocked(sdk.kotakSdkRequest).mockResolvedValueOnce({holdings:{data:[]},positions:{data:[]},limits:{Net:'100',MarginUsed:'20',CollateralValue:'80'},quotes:[]});
     const result=await fetchKotakPortfolio(session,'LIVE',new Date(),'A',undefined,8000,'app');
-    expect(sdk.kotakSdkRequest).toHaveBeenLastCalledWith('portfolio',{session,accountId:'A',appAccessToken:'app'});
+    expect(sdk.kotakSdkRequest).toHaveBeenLastCalledWith('portfolio',{session,accountId:'A',appAccessToken:'app'},undefined,8000);
     expect(result.holdings.availableMarginPaise).toBe(10000);
     expect(result.pnl.netPaise).toBeNull();
     vi.mocked(sdk.kotakSdkRequest).mockRejectedValueOnce(new Error('SDK failed'));

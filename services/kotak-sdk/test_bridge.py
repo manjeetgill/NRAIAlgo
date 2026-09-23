@@ -76,8 +76,8 @@ class BridgeTests(unittest.TestCase):
         client.place_order.assert_not_called()
 
     def test_tick_uses_sdk_decoded_price_and_source_update_timestamp(self):
-        tick = SimpleNamespace(type="scrip", exchange_segment="nse_fo", instrument_token="123", last_traded_price=123.45, last_update_time=1800000000)
-        self.assertEqual(bridge.tick_message(tick), dict(type="tick", key="nse_fo|123", price=123.45, sourceAt=1800000000000))
+        tick = SimpleNamespace(type="scrip", exchange_segment="nse_fo", instrument_token="123", last_traded_price=123.45, close_price=120.0, last_update_time=1800000000)
+        self.assertEqual(bridge.tick_message(tick), dict(type="tick", key="nse_fo|123", price=123.45, previousClose=120.0, sourceAt=1800000000000))
         tick.last_traded_price = math.nan
         self.assertIsNone(bridge.tick_message(tick))
         self.assertIsNone(bridge.tick_message(SimpleNamespace(type="index")))

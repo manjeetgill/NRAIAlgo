@@ -1,0 +1,18 @@
+"use client";
+import { RecordTable } from "./record-table";
+import { SnapshotMetric } from "./snapshot-metric";
+import type { PortfolioRow } from "./portfolio-table";
+import { formatPaise } from "./format";
+import styles from "./market-open.module.css";
+
+const columns = [["symbol", "Instrument & ISIN"], ["accountId", "Broker / Account"], ["pledgedQuantity", "Pledge"], ["quantity", "Qty (Pldg/Free)"], ["averagePaise", "Avg Cost"], ["ltpPaise", "Last price"], ["investedPaise", "Invested"], ["marketValuePaise", "Current Val"], ["dayPnlPaise", "Price-change impact (est.)"], ["unrealizedPaise", "Unrealized P&L"]] as const;
+const labels: Record<string, string> = { zerodha: "Zerodha", kotak: "Kotak", icici: "ICICI" };
+const money = (value: number | null | undefined) => value == null ? "—" : formatPaise(value);
+const tone = (value: number | null | undefined) => value == null || value === 0 ? "neutral" : value > 0 ? "positive" : "negative";
+export function DetailedPortfolio({ rows, available, scope, showBroker = true }: { rows: PortfolioRow[]; available: boolean; scope?: string | undefined; showBroker?: boolean }) {
+  const total = (key: "marketValuePaise" | "investedPaise" | "dayPnlPaise" | "unrealizedPaise") => available && rows.every(row => row[key] != null) ? rows.reduce((sum, row) => sum + row[key]!, 0) : null;
+  return <div className={`${styles.positionTable} ${styles.portfolioTable} ${styles.detailedPortfolio}`}>
+    <div className={styles.positionSummary}>{[["Portfolio Value", total("marketValuePaise")], ["Invested Value", total("investedPaise")], ["Total Unrealized P&L", total("unrealizedPaise")], ["Price-change impact (est.)", total("dayPnlPaise")]].map(([label, value]) => <div key={String(label)}><span>{label}</span><SnapshotMetric value={value as number | null} signed={label === "Total Unrealized P&L" || label === "Price-change impact (est.)"} scope={scope ?? rows.map(row => `${row.provider}:${row.accountId}:${row.symbol}`).sort().join("|")} /><small>{[...new Set(rows.map(row=>labels[row.provider] ?? row.provider))].join(" + ") || "Selected accounts"} · before charges</small></div>)}</div>
+    <RecordTable rows={rows} label="Portfolio holdings by broker" id={(row,i) => row.provider+row.accountId+row.symbol+i} {...(showBroker ? { group: (row: PortfolioRow) => labels[row.provider] ?? row.provider } : {})} columns={columns.map(([key,label]) => ({key,label:key === "accountId" && !showBroker ? "Account" : label,value:(row: PortfolioRow)=>row[key],render:(row: PortfolioRow) => key === "symbol" ? <><strong>{row.name || row.symbol}</strong><small>{row.symbol} · {row.exchange ?? "Exchange not supplied"} · {row.isin ?? "ISIN not supplied"}</small></> : key === "accountId" ? <>{showBroker && <span className={styles.brokerChip} data-broker={row.provider}>{labels[row.provider]}</span>}<small>{row.accountId}</small></> : key === "pledgedQuantity" ? <span role="img" aria-label={row.pledgedQuantity == null ? "Pledge status unavailable" : row.pledgedQuantity > 0 ? "Partly or fully pledged" : "Not pledged"}>{row.pledgedQuantity == null ? "Not supplied" : row.pledgedQuantity > 0 ? "🔒" : "○"}</span> : key === "quantity" ? <>{row.quantity ?? "Not supplied"}<small>Pledged: {row.pledgedQuantity ?? "not supplied"}</small></> : <span data-tone={tone(row[key])}>{money(row[key])}</span> }))} /><p className={styles.positionNotice}>{rows.length} reported holdings · — means unavailable, not zero. Price-change impact is an estimate on current quantity, not actual daily trading P&L. Each row identifies its exchange. Pledge quantities do not establish sellable quantity.</p>
+  </div>;
+}

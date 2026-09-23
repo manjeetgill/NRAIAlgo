@@ -5,7 +5,7 @@ import {OVERVIEW_SNAPSHOT_FIXTURES,type OverviewSnapshot} from '@nraialgo/contra
 import type {Store} from '../database.js';
 import type {credentialVault} from '../credential-vault.js';
 import {buildOverviewSnapshot,loadOverviewInputs} from '../build-overview-snapshot.js';
-import {overviewRoutes} from './overview.js';
+import {isFullyReconciledForPerformance,overviewRoutes} from './overview.js';
 
 const managers=vi.hoisted(()=>{
   const manager=()=>({ensure:vi.fn(),needsReconciliation:vi.fn(()=>false),reconciliationVersion:vi.fn(()=>7),reconciled:vi.fn(),overlay:vi.fn((value:unknown)=>value),prune:vi.fn(),close:vi.fn()});
@@ -29,6 +29,16 @@ beforeEach(async()=>{
 afterEach(async()=>{await app.close();vi.useRealTimers();});
 
 describe('overview failure recovery without a database or broker calls',()=>{
+  it('accepts only complete reconciled broker coverage for persisted performance',()=>{
+    const complete=base();complete.configuredProviders=['zerodha','kotak'];complete.pnl.status='available';complete.brokerReconciliation={zerodha:{accountId:'Z',status:'confirmed',asOf:complete.generatedAt},kotak:{accountId:'K',status:'confirmed',asOf:complete.generatedAt}};
+    expect(isFullyReconciledForPerformance(complete)).toBe(true);
+    const degraded=structuredClone(complete);degraded.pnl.status='degraded';
+    expect(isFullyReconciledForPerformance(degraded)).toBe(false);
+    const missing=structuredClone(complete);missing.brokerReconciliation!.kotak!.status='failed';
+    expect(isFullyReconciledForPerformance(missing)).toBe(false);
+    const includesIcici=structuredClone(complete);includesIcici.configuredProviders=['zerodha','kotak','icici'];
+    expect(isFullyReconciledForPerformance(includesIcici)).toBe(false);
+  });
   it('returns controlled 503 during an empty-cache cooldown and recovers after it',async()=>{
     managers.kotak.needsReconciliation.mockReturnValue(true);
     vi.mocked(buildOverviewSnapshot).mockRejectedValueOnce(new Error('private upstream detail')).mockResolvedValueOnce(base());

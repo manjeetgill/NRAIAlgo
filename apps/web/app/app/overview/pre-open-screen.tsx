@@ -1,22 +1,27 @@
+import { UpdatedAt } from "./updated-at";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import type { OverviewSnapshot, Panel } from "@nraialgo/contracts";
 import { formatPaise, formatTimestamp } from "./format";
 import shared from "./market-open.module.css";
 import styles from "./pre-open.module.css";
+import type { PortfolioRow } from "./portfolio-table";
 
 function Card({ title, badge, children }: { title: string; badge?: string; children: ReactNode }) {
   return <section className={shared.card} aria-label={title}><header className={shared.cardHeader}><div className={shared.cardHeading}><h2>{title}</h2></div>{badge && <span className={shared.tag}>{badge}</span>}</header>{children}</section>;
 }
 function Source({ panel }: { panel: Panel<unknown> }) {
-  return <div className={shared.provenance}>{panel.reason && <span className={shared.warning}>{panel.reason}</span>}<span>Source: {panel.source} · As of {formatTimestamp(panel.asOf)} IST</span></div>;
+  return <details className={shared.provenance}><summary>Source & refresh {panel.status !== "available" ? "*" : ""}</summary><UpdatedAt value={panel.asOf}/><p>Source: {panel.source}</p><span>{panel.reason}</span></details>;
 }
 const money = (value: number | null | undefined) => value == null ? "—" : formatPaise(value);
 const CHECKS = { totp: "Platform MFA Sign-in", priceFeed: "Market-data Feed", brokerSessions: "Broker Gateways", riskLimits: "Risk Limit Guardrails" };
 const STATUS: Record<string, string> = { passed: "Passed", failed: "Failed", unknown: "Unknown", not_applicable: "Not applicable" };
 
-export function PreOpenScreen({ snapshot, layoutOnly = false }: { snapshot: OverviewSnapshot; layoutOnly?: boolean }) {
+export function PreOpenScreen({ snapshot, layoutOnly = false, accountHoldings }: { snapshot: OverviewSnapshot; layoutOnly?: boolean; accountHoldings?: { rows: PortfolioRow[]; complete: boolean } }) {
   const holdings = snapshot.holdings.data;
+  const holdingRows = accountHoldings?.rows ?? holdings?.holdings ?? [];
+  const complete = accountHoldings?.complete ?? snapshot.holdings.status === "available";
+  const holdingValue = complete && holdingRows.every(row => row.marketValuePaise != null) ? holdingRows.reduce((sum, row) => sum + row.marketValuePaise!, 0) : null;
   const deployment = snapshot.deployment.data;
   const expired = snapshot.connections.data?.some(connection => connection.status === "session_expired");
   const checks = Object.entries(CHECKS).map(([key, label]) => ({ label, check:
@@ -44,7 +49,7 @@ export function PreOpenScreen({ snapshot, layoutOnly = false }: { snapshot: Over
         <p className={styles.note}>Reference quotes are not indicative auction prices. Auction equilibrium, imbalance, volume and projected straddle analytics are unavailable in the current data contract.</p><Source panel={snapshot.prices} />
       </Card>
       <Card title="Capital & Float Audit" badge="Broker-reported snapshot">
-        <div className={styles.capital}><span className={shared.label}>Reported holdings value</span><strong>{money(holdings ? holdings.holdings.reduce((sum, item) => sum + item.marketValuePaise, 0) : null)}</strong></div>
+        <div className={styles.capital}><span className={shared.label}>{complete ? "Reported holdings value" : "Total withheld — selected account data incomplete"}</span><strong>{money(holdingValue)}</strong></div>
         <div className={styles.metrics}><div><span>Available margin</span><strong className={shared.positive}>{money(holdings?.availableMarginPaise)}</strong></div><div><span>Used margin</span><strong className={shared.warning}>{money(holdings?.usedMarginPaise)}</strong></div></div>
         <dl className={shared.values}><div><dt>Collateral</dt><dd>{money(holdings?.collateralPaise)}</dd></div><div><dt>Strategy allocated capital</dt><dd>{money(snapshot.pnl.data?.baseCapital.amountPaise)}</dd></div><div><dt>Staged margin requirement</dt><dd>Unavailable</dd></div></dl>
         {holdings?.brokerBalances?.map(balance => <div className={styles.broker} key={`${balance.provider}:${balance.accountId}`}><strong>{balance.provider} · {balance.accountId}</strong><span>{money(balance.availableMarginPaise)} available</span><small>{formatTimestamp(balance.asOf)} IST</small></div>)}

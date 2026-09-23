@@ -13,7 +13,7 @@ class Stream {
   addEventListener(_name: string, cb: (event: {data: string}) => void) { this.callback = cb; }
   emit(value: unknown) { this.callback?.({ data: JSON.stringify(value) }); }
 }
-afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+afterEach(() => { window.localStorage.clear(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 describe("Alpha Wire", () => {
   it("loads, filters and opens real-source links; preserves cards during outages and closes the stream", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => snapshot }));
@@ -50,5 +50,14 @@ describe("Alpha Wire", () => {
     expect(screen.getByRole("button", { name: "Options" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Collapse" }));
     expect(screen.queryByText(item.title)).not.toBeInTheDocument();
+  });
+  it("restores and updates the user's collapsed preference", async () => {
+    window.localStorage.setItem("nraialgo.alpha-wire.collapsed", "true");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => snapshot }));
+    vi.stubGlobal("EventSource", Stream);
+    render(<AlphaWire enabled />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Expand" })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Expand" }));
+    expect(window.localStorage.getItem("nraialgo.alpha-wire.collapsed")).toBe("false");
   });
 });

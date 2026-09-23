@@ -19,8 +19,8 @@ export interface NavGroup {
  * labels (Research Core / Options Desk / Execution & Capital /
  * Institutional Setup) -- a third variant, superseding both the
  * written spec's grouping and the earlier PDF mockup's. Algo Terminal
- * and Broker Gateways are real routes; every other item is a
- * placeholder until its own commit builds it.
+ * and Broker Gateways are real routes. Implemented portfolio routes remain
+ * links; unfinished research and execution tools are explicit placeholders.
  */
 export const NAV_GROUPS: readonly NavGroup[] = [
   {
@@ -42,8 +42,10 @@ export const NAV_GROUPS: readonly NavGroup[] = [
   {
     label: "Execution & Capital",
     items: [
-      { label: "Orders & Trades", href: "/app/orders-trades", icon: "receipt_long", built: false },
-      { label: "Live Positions", href: "/app/live-positions", icon: "candlestick_chart", built: false },
+      { label: "Orders & Trades", href: "/app/orders-trades", icon: "receipt_long", built: true },
+      { label: "Live Positions", href: "/app/live-positions", icon: "candlestick_chart", built: true },
+      { label: "Funds & Margin", href: "/app/funds-margin", icon: "payments", built: true },
+      { label: "Cash Holdings", href: "/app/cash-holdings", icon: "account_balance_wallet", built: true },
       { label: "Portfolio & PIS", href: "/app/portfolio", icon: "account_balance_wallet", built: false },
     ],
   },

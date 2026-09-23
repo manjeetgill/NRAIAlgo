@@ -12,6 +12,12 @@ India VIX,18-09-2026,12.29,12.29,11.3075,11.39,-0.91,-7.36,-,-,-,-,-
 `;
 
 describe("parseIndexCloseCsv", () => {
+  it.each(["", " ", "0", "-1", "NaN", "Infinity"])("rejects invalid tracked prices %j", value => {
+    expect(() => parseIndexCloseCsv(`Index Name,Closing Index Value\nNifty 50,${value}\nNifty Bank,10\nIndia VIX,12`, "2026-09-18")).toThrow("Invalid NSE closing value");
+  });
+  it("rejects a different publication date", () => {
+    expect(() => parseIndexCloseCsv(REAL_SAMPLE, "2026-09-21")).toThrow("date mismatch");
+  });
   it("extracts exactly the three tracked indices with their real closing values", () => {
     const quotes = parseIndexCloseCsv(REAL_SAMPLE, "2026-09-18");
 

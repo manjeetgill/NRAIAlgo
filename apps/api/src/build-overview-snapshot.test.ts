@@ -5,9 +5,10 @@ import { readLocalPostgresConfiguration } from "./local-database.js";
 import { seedNseCalendar } from "./market-calendar.js";
 import { credentialVault } from "./credential-vault.js";
 import type { PriceQuote } from "@nraialgo/contracts";
+import { recordSessionGrossPnl } from "./session-performance.js";
 
 const vault = credentialVault({ CREDENTIAL_VAULT_KEY: "e".repeat(64) } as NodeJS.ProcessEnv);
-const EXCHANGE = "TEST";
+const EXCHANGE = "OVR_TEST";
 const SEGMENT = "EQ";
 const SCOPE = {
   workspaceId: "ws-test",
@@ -38,10 +39,10 @@ let store: Store;
 
 beforeAll(async () => {
   const local = readLocalPostgresConfiguration();
-  const migrationStore = openDatabaseStore(process.env.DATABASE_URL ?? local?.adminUrl);
+  const migrationStore = openDatabaseStore(process.env.TEST_DATABASE_ADMIN_URL ?? process.env.DATABASE_URL ?? local?.adminUrl);
   try {
     await runDatabaseMigrations(migrationStore, {
-      runtimePassword: process.env.DATABASE_URL ? undefined : local?.applicationPassword,
+      runtimePassword: process.env.TEST_DATABASE_RUNTIME_PASSWORD ?? (process.env.DATABASE_URL ? undefined : local?.applicationPassword),
     });
   } finally {
     await migrationStore.close();
@@ -71,6 +72,7 @@ afterEach(async () => {
     await query("DELETE FROM market_calendar WHERE exchange=$1", [EXCHANGE]);
     await query("DELETE FROM broker_app_credentials WHERE workspace_id=$1", [SCOPE.workspaceId]);
     await query("DELETE FROM broker_sessions WHERE workspace_id=$1", [SCOPE.workspaceId]);
+    await query("DELETE FROM session_pnl_history WHERE workspace_id=$1", [SCOPE.workspaceId]);
   });
 });
 
@@ -113,6 +115,26 @@ async function saveKotakSession() {
       [
         SCOPE.workspaceId,
         vault.seal(`${SCOPE.workspaceId}:kotak:session`, { token: "t", sid: "s", baseUrl: "https://neo.example" }),
+        new Date(Date.now() + 3_600_000).toISOString(),
+      ],
+    );
+  });
+}
+
+async function saveIciciSession() {
+  await store.transaction(async (query) => {
+    await query(
+      `INSERT INTO broker_app_credentials (workspace_id, provider, ciphertext, updated_at)
+       VALUES ($1,'icici',$2,now())
+       ON CONFLICT (workspace_id, provider) DO UPDATE SET ciphertext=EXCLUDED.ciphertext, updated_at=now()`,
+      [SCOPE.workspaceId, vault.seal(`${SCOPE.workspaceId}:icici`, { apiKey: "test-key", apiSecret: "test-secret-value" })],
+    );
+    await query(
+      `INSERT INTO broker_sessions (workspace_id, provider, ciphertext, expires_at, updated_at)
+       VALUES ($1,'icici',$2,$3,now())`,
+      [
+        SCOPE.workspaceId,
+        vault.seal(`${SCOPE.workspaceId}:icici:session`, { sessionToken: "verified-token", accountId: "IC001" }),
         new Date(Date.now() + 3_600_000).toISOString(),
       ],
     );
@@ -169,6 +191,18 @@ describe("buildOverviewSnapshot -- prices panel", () => {
 });
 
 describe("buildOverviewSnapshot -- portfolio panels (broker adapters injected)", () => {
+  it("recognises an unexpired verified ICICI session in shared authorization readiness", async () => {
+    await saveIciciSession();
+
+    const snapshot = await snapshotFor(new Date("2026-09-19T06:00:00Z"));
+
+    expect(snapshot.configuredProviders).toEqual(["icici"]);
+    expect(snapshot.authorizedProviders).toEqual(["icici"]);
+    expect(snapshot.readiness.data?.checks.brokerSessions).toEqual({ status: "passed", reason: null });
+    expect(snapshot.pnl.reason).not.toBe("NO_AUTHORIZED_BROKER_SESSION");
+    expect(snapshot.connections.reason).toBe("NO_VERIFIED_BROKER_READS");
+  });
+
   it("reports a real adapter failure honestly, never falling back to 'no session'", async () => {
     await saveZerodhaSession();
 
@@ -275,6 +309,78 @@ describe("buildOverviewSnapshot -- portfolio panels (broker adapters injected)",
     expect(snapshot.pnl.data?.baseCapital.amountPaise).toBeNull();
   });
 
+  it("attaches session performance history to the combined pnl data, empty when no history is recorded yet", async () => {
+    await saveZerodhaSession();
+
+    const snapshot = await snapshotFor(new Date("2026-09-19T06:00:00Z"), {
+      ...FAKE_DEPS,
+      fetchZerodhaPortfolio: async () => ({
+        holdings: {
+          holdings: [],
+          collateralPaise: 0,
+          usedMarginPaise: 0,
+          availableMarginPaise: 100_000_00,
+          accountAsOf: "2026-09-19T06:00:00.000Z",
+          valuationAsOf: "2026-09-19T06:00:00.000Z",
+        },
+        pnl: {
+          period: "session",
+          currency: "INR" as const,
+          baseCapital: { context: "live" as const, amountPaise: null },
+          realisedPaise: 0,
+          unrealisedPaise: 500_00,
+          grossPaise: 500_00,
+          chargesPaise: null,
+          netPaise: null,
+          valuationAsOf: "2026-09-19T06:00:00.000Z",
+          reconciliationStatus: "provisional" as const,
+        },
+      }),
+    });
+
+    expect(snapshot.pnl.data?.performance).toEqual({
+      sessionsRecorded: 0,
+      sessionsRequiredForSharpe: 20,
+      dayWinRatePct: null,
+      maxDrawdownPaise: null,
+      sharpe: null,
+    });
+  });
+
+  it("reflects real recorded session history once some exists", async () => {
+    await saveZerodhaSession();
+    await store.transaction((query) => recordSessionGrossPnl(query, SCOPE.workspaceId, "2026-09-18", 10_000));
+
+    const snapshot = await snapshotFor(new Date("2026-09-19T06:00:00Z"), {
+      ...FAKE_DEPS,
+      fetchZerodhaPortfolio: async () => ({
+        holdings: {
+          holdings: [],
+          collateralPaise: 0,
+          usedMarginPaise: 0,
+          availableMarginPaise: 100_000_00,
+          accountAsOf: "2026-09-19T06:00:00.000Z",
+          valuationAsOf: "2026-09-19T06:00:00.000Z",
+        },
+        pnl: {
+          period: "session",
+          currency: "INR" as const,
+          baseCapital: { context: "live" as const, amountPaise: null },
+          realisedPaise: 0,
+          unrealisedPaise: 500_00,
+          grossPaise: 500_00,
+          chargesPaise: null,
+          netPaise: null,
+          valuationAsOf: "2026-09-19T06:00:00.000Z",
+          reconciliationStatus: "provisional" as const,
+        },
+      }),
+    });
+
+    expect(snapshot.pnl.data?.performance?.sessionsRecorded).toBe(1);
+    expect(snapshot.pnl.data?.performance?.dayWinRatePct).toBe(100);
+  });
+
   it("fails closed (treats the session as absent) when a decrypted session row doesn't match the expected shape", async () => {
     // A malformed/corrupted record, not a valid ZerodhaSession -- missing userId.
     await store.transaction(async (query) => {
@@ -297,6 +403,8 @@ describe("buildOverviewSnapshot -- portfolio panels (broker adapters injected)",
     const snapshot = await snapshotFor(new Date("2026-09-19T06:00:00Z"));
 
     expect(snapshot.pnl.status).toBe("unavailable");
-    expect(snapshot.pnl.reason).toBe("NO_AUTHORIZED_BROKER_SESSION");
+    expect(snapshot.pnl.reason).toBe("zerodha: authorization required");
+    expect(snapshot.configuredProviders).toEqual(["zerodha"]);
+    expect(snapshot.readiness.data?.checks.brokerSessions.status).toBe("failed");
   });
 });

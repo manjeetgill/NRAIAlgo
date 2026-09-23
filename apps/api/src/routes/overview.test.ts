@@ -9,10 +9,10 @@ let store: Store;
 
 beforeAll(async () => {
   const local = readLocalPostgresConfiguration();
-  const migrationStore = openDatabaseStore(process.env.DATABASE_URL ?? local?.adminUrl);
+  const migrationStore = openDatabaseStore(process.env.TEST_DATABASE_ADMIN_URL ?? process.env.DATABASE_URL ?? local?.adminUrl);
   try {
     await runDatabaseMigrations(migrationStore, {
-      runtimePassword: process.env.DATABASE_URL ? undefined : local?.applicationPassword,
+      runtimePassword: process.env.TEST_DATABASE_RUNTIME_PASSWORD ?? (process.env.DATABASE_URL ? undefined : local?.applicationPassword),
     });
   } finally {
     await migrationStore.close();
@@ -103,5 +103,17 @@ describe("GET /v1/overview", () => {
     const b = await loginTestUser(app, store, "overview-user-b@example.com");
 
     expect(a.workspaceId).not.toBe(b.workspaceId);
+  });
+
+  it("never records session P&L history when there is no broker session to derive it from", async () => {
+    const app = buildServer(store);
+    const { cookie, workspaceId } = await loginTestUser(app, store, "overview-no-history@example.com");
+
+    await app.inject({ method: "GET", url: "/v1/overview", headers: { cookie } });
+
+    const rows = await store.transaction((query) =>
+      query("SELECT 1 FROM session_pnl_history WHERE workspace_id=$1", [workspaceId]),
+    );
+    expect(rows).toHaveLength(0);
   });
 });

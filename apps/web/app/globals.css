@@ -186,3 +186,7 @@ body {
     "GRAD" 0,
     "opsz" 24;
 }
+
+/* Numeric direction must survive refresh fallback and component typography. */
+strong[data-tone="positive"] { color: #10b981; }
+strong[data-tone="negative"] { color: #ef4444; }

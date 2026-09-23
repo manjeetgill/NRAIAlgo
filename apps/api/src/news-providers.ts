@@ -24,6 +24,24 @@ function item(p: Pick<NewsProvider, "name" | "category">, title: unknown, link: 
   const id = createHash("sha256").update(JSON.stringify([url, headline.toLowerCase()])).digest("hex");
   return { ...extra, id, title: headline, url, source: p.name, category: p.category, publishedAt: date(published, now), receivedAt: now.toISOString() };
 }
+// BSE's own <description> field sometimes glues a bare filing-type label
+// directly onto the real headline with no punctuation at all -- verified
+// against BSE's own live feed (bseindia.com/data/xml/announcements.aspx):
+// description was literally "Press Release Brahma raises AI $150 MILLION
+// ROUND LED BY MULTIPLES" as one string. That is BSE's own raw data, not
+// something introduced here -- most descriptions ("Disclosure under
+// Regulation 30...") are already one coherent sentence and must be left
+// alone. Only the known bare-label prefixes below get a separator inserted
+// after them; anything else passes through unchanged.
+const BSE_FILING_LABEL_PREFIXES = [/^Press Release\s+(?=\S)/i, /^General Updates?\s+(?=\S)/i];
+function splitBseFilingLabel(description: string): string {
+  for (const pattern of BSE_FILING_LABEL_PREFIXES) {
+    const match = description.match(pattern);
+    if (match) return `${match[0].trim()} — ${description.slice(match[0].length)}`;
+  }
+  return description;
+}
+
 export function parseRss(body: string, provider: Pick<NewsProvider, "name" | "category">, now: Date) {
   const maxBytes = provider.name === "BSE announcements" ? 5_000_000 : 2_000_000;
   if (Buffer.byteLength(body) > maxBytes || /<!DOCTYPE|<!ENTITY/i.test(body)) throw new Error("Invalid RSS");
@@ -37,8 +55,9 @@ export function parseRss(body: string, provider: Pick<NewsProvider, "name" | "ca
     let url = fields.link?.trim() ?? "";
     // Official RSS links use HTTP; offer the same official resource over HTTPS.
     url = url.replace(/^http:\/\/(www\.)?(rbi\.org\.in|sebi\.gov\.in|bseindia\.com|pib\.gov\.in)\//i, "https://$1$2/");
-    const title = provider.name === "BSE announcements" && text(fields.description)
-      ? `${text(fields.title)} — ${text(fields.description)}` : fields.title;
+    const description = text(fields.description);
+    const title = provider.name === "BSE announcements" && description
+      ? `${text(fields.title)} — ${splitBseFilingLabel(description)}` : fields.title;
     const parsed = item(provider, title, url, fields.pubdate, now);
     if (parsed) result.push(parsed); fields = undefined;
   });

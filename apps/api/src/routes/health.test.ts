@@ -14,6 +14,14 @@ const unusedStore: Store = {
 };
 
 describe("GET /health", () => {
+  it("reports unavailable calendar coverage when storage cannot be read", async () => {
+    const app = buildServer(unusedStore);
+    try {
+      const response = await app.inject({method:"GET",url:"/v1/calendar-health"});
+      expect(response.statusCode).toBe(503);
+      expect(response.headers["cache-control"]).toBe("no-store");
+    } finally { await app.close(); }
+  });
   it("returns ok without touching any dependency", async () => {
     const app = buildServer(unusedStore);
 
@@ -29,10 +37,10 @@ describe("GET /v1/readiness", () => {
 
   beforeAll(async () => {
     const local = readLocalPostgresConfiguration();
-    const migrationStore = openDatabaseStore(process.env.DATABASE_URL ?? local?.adminUrl);
+    const migrationStore = openDatabaseStore(process.env.TEST_DATABASE_ADMIN_URL ?? process.env.DATABASE_URL ?? local?.adminUrl);
     try {
       await runDatabaseMigrations(migrationStore, {
-        runtimePassword: process.env.DATABASE_URL ? undefined : local?.applicationPassword,
+        runtimePassword: process.env.TEST_DATABASE_RUNTIME_PASSWORD ?? (process.env.DATABASE_URL ? undefined : local?.applicationPassword),
       });
     } finally {
       await migrationStore.close();

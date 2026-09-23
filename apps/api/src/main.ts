@@ -2,7 +2,7 @@ import { buildServer } from "./server.js";
 import { openDatabaseStore, runDatabaseMigrations, verifyRuntimeDatabase } from "./database.js";
 import { loadSecretFiles, validateProductionConfig } from "./production-config.js";
 import { readLocalPostgresConfiguration } from "./local-database.js";
-import { seedNseCalendar } from "./market-calendar.js";
+import { seedNseCalendar, calendarCoverage } from "./market-calendar.js";
 
 // Development bootstraps its database; production uses a separate migration
 // job. The long-running API must never receive administrative credentials.
@@ -44,7 +44,9 @@ if (production) {
 const CALENDAR_SEED_WINDOW_DAYS = 90;
 async function reseedCalendar() {
   try {
-    await store.transaction((query) => seedNseCalendar(query, { from: new Date(), days: CALENDAR_SEED_WINDOW_DAYS }));
+    await store.transaction((query) => seedNseCalendar(query, { from: new Date(Date.now() - 30 * 86_400_000), days: CALENDAR_SEED_WINDOW_DAYS + 30 }));
+    const coverage = await store.transaction(query => calendarCoverage(query));
+    if (coverage.status !== "ok") console.error("Exchange calendar coverage expiring; import verified sessions before the coverage ends", coverage);
   } catch (err) {
     // A failed reseed must not crash a running server -- the existing
     // window keeps serving; resolveSessionState already fails closed

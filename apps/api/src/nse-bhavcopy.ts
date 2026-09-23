@@ -44,7 +44,12 @@ export function parseIndexCloseCsv(csv: string, day: string): PriceQuote[] {
   for (const line of lines.slice(1)) {
     const cells = line.split(",");
     const name = cells[nameIndex]?.trim();
-    const close = Number(cells[closeIndex]);
+    if (!INDEX_INSTRUMENTS.some(index => index.indexName === name)) continue;
+    const raw = cells[closeIndex]?.trim() ?? "";
+    const close = Number(raw);
+    if (!/^\d+(?:\.\d+)?$/.test(raw) || !Number.isFinite(close) || close <= 0) throw new Error(`Invalid NSE closing value for ${name}`);
+    const dateIndex = header.indexOf("Index Date");
+    if (dateIndex >= 0 && cells[dateIndex]?.trim() !== day.split("-").reverse().join("-")) throw new Error("NSE closing date mismatch");
     if (name && Number.isFinite(close)) {
       closingValues.set(name, close);
     }

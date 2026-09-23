@@ -1,10 +1,17 @@
 "use client";
 
-import { useEffect, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import styles from "./broker-connections.module.css";
 import { StatusBadge } from "@/app/components/status-badge/status-badge";
 import { useToast } from "@/app/components/toast/toast";
 import { formatTimestamp } from "@/app/app/overview/format";
+import { IciciConnection } from "./icici-connection";
+
+import { useOverviewSnapshot } from "../overview/use-overview-snapshot";
+import { useIciciAccount } from "../overview/use-icici-account";
+import { withIciciOverviewStatus } from "../overview/icici-overview-status";
+import { BrokerHealth } from "../overview/broker-health";
+import { useShellOverview } from "@/app/components/shell/overview-context";
 
 type BrokerId = "zerodha" | "kotak";
 type ConfiguredStatus = Record<BrokerId, string | null>;
@@ -44,7 +51,11 @@ type SessionStatus = Record<BrokerId, string | null>;
  */
 export function BrokerConnectionsScreen() {
   const toast = useToast();
-  const [activeBroker, setActiveBroker] = useState<BrokerId>("zerodha");
+  const overview = useOverviewSnapshot(), icici = useIciciAccount();
+  const shared = useMemo(() => overview.snapshot ? withIciciOverviewStatus(overview.snapshot,icici.account,icici.stale) : null,[overview.snapshot,icici.account,icici.stale]);
+  useShellOverview(shared,overview.stale);
+  const [activeBroker, setActiveBroker] = useState<BrokerId | "icici">("zerodha");
+  useEffect(() => { const select = () => { const value = window.location.hash.slice(1); if (value === "zerodha" || value === "kotak" || value === "icici") setActiveBroker(value); }; select(); window.addEventListener("hashchange",select); return () => window.removeEventListener("hashchange",select); }, []);
   const [showZerodhaSecret, setShowZerodhaSecret] = useState(false);
 
   const [zerodhaApiKey, setZerodhaApiKey] = useState("");
@@ -156,7 +167,7 @@ export function BrokerConnectionsScreen() {
       setReconfiguring((current) => ({ ...current, [activeBroker]: false }));
       await refreshConfigured();
       toast.show(
-        `${activeBroker === "zerodha" ? "Zerodha" : "Kotak Neo"} setup saved.`,
+        `${activeBroker === "zerodha" ? "Zerodha" : "Kotak"} setup saved.`,
         "success",
       );
     } catch (caught) {
@@ -222,9 +233,9 @@ export function BrokerConnectionsScreen() {
       setKotakTotp("");
       setKotakMpin("");
       setAuthState("idle");
-      setAuthNotice("Kotak Neo authorized for today.");
+      setAuthNotice("Kotak authorized for today.");
       await refreshSession();
-      toast.show("Kotak Neo authorized for today.", "success");
+      toast.show("Kotak authorized for today.", "success");
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "Kotak authorization failed.";
       setAuthState("error");
@@ -250,13 +261,12 @@ export function BrokerConnectionsScreen() {
   return (
     <main className={styles.page}>
       <div className={styles.mockNotice} role="note" aria-label="Backend status notice">
-        <strong>Both steps are real now.</strong> Setup encrypts and persists
-        your app credentials; Authorize actually contacts the broker (Kite
-        OAuth for Zerodha, a direct TOTP+MPIN login for Kotak) and stores
-        today&apos;s session. This has been verified against the documented
-        protocol and AlgoTrade&apos;s working adapters, but not against a
-        live broker account in this environment.
+        <strong>Broker setup and authorization.</strong> Save app credentials once,
+        then authorize each broker session when required. Account data appears in
+        Algo Terminal and Cash Holdings. Authorization permits account reads;
+        order execution is unavailable.
       </div>
+      <details><summary>Session and service health</summary><dl><dt>Application configuration</dt><dd>{shared?.configuredProviders?.includes(activeBroker) ? "Configured" : "Not confirmed"}</dd><dt>Daily authorization</dt><dd>{shared?.authorizedProviders?.includes(activeBroker) ? "Session received; core reads determine health" : "Authorization required"}</dd><dt>Portfolio</dt><dd>{activeBroker === "icici" ? icici.account?.sections.portfolioholdings?.status ?? "Not received" : shared?.brokerReconciliation?.[activeBroker]?.status ?? "Not received"}</dd><dt>Orders</dt><dd>{activeBroker === "icici" ? icici.account?.sections.order?.status ?? "Not received" : activeBroker === "zerodha" ? shared?.brokerOrders?.status ?? "Not received" : "Not connected"}</dd><dt>Funds</dt><dd>{activeBroker === "icici" ? icici.account?.sections.funds?.status ?? "Not received" : shared?.holdings.data?.brokerBalances?.some(row=>row.provider===activeBroker) ? "Received" : "Not received"}</dd><dt>Market data</dt><dd>{activeBroker === "zerodha" ? shared?.marketStream?.status ?? "Snapshot" : "Snapshot"}</dd><dt>Trading</dt><dd>Disabled</dd></dl><details><summary>Technical diagnostics</summary><p>{shared?.holdings.reason}</p><p>{shared?.brokerOrders?.reason}</p><p>{activeBroker === "icici" ? icici.status : ""}</p></details></details>
       {authNotice && (
         <div className={styles.mockNotice} role="status" aria-label="Authorization notice">
           {authNotice}
@@ -269,7 +279,8 @@ export function BrokerConnectionsScreen() {
       )}
 
       <div className={styles.header}>
-        <h1 className={styles.title}>Broker Gateways</h1>
+        <BrokerHealth snapshot={shared} stale={overview.stale}/><button type="button" onClick={()=>{overview.refresh();icici.refresh();void refreshSession();}}>Refresh connection health</button>
+      <h1 className={styles.title}>Broker Gateways</h1>
         <p className={styles.subtitle}>
           Two separate steps per broker: setup once, then authorize again
           every trading day. Broker sessions expire daily, so step 2 is
@@ -295,11 +306,12 @@ export function BrokerConnectionsScreen() {
             className={`${styles.tab} ${activeBroker === "kotak" ? styles.tabActive : ""}`}
             onClick={() => setActiveBroker("kotak")}
           >
-            Kotak Neo
+            Kotak
           </button>
+          <button type="button" role="tab" aria-selected={activeBroker === "icici"} className={`${styles.tab} ${activeBroker === "icici" ? styles.tabActive : ""}`} onClick={() => setActiveBroker("icici")}>ICICI</button>
         </div>
 
-        {activeBroker === "zerodha" ? (
+        {activeBroker === "icici" ? <IciciConnection /> : activeBroker === "zerodha" ? (
           <div className={styles.tabPanel} role="tabpanel" aria-label="Zerodha Kite setup">
             <div className={styles.stepHeader}>
               <span className={styles.stepBadge}>Step 1</span>
@@ -401,12 +413,12 @@ export function BrokerConnectionsScreen() {
 
             <button
               type="button"
-              className={`${styles.button} ${styles.buttonPrimary}`}
+              className={`${styles.button} ${session.zerodha ? styles.buttonSecondary : styles.buttonPrimary}`}
               onClick={() => void handleAuthorizeZerodha()}
               disabled={zerodhaAuthorizeDisabled}
               title={configured.zerodha ? undefined : "Save step 1 (app setup) before authorizing"}
             >
-              {authState === "authorizing" ? "Redirecting…" : "Authorize with Zerodha"}
+              {authState === "authorizing" ? "Redirecting…" : session.zerodha ? "Re-authorize Zerodha" : "Authorize with Zerodha"}
             </button>
 
             <div className={styles.calloutBox}>
@@ -421,7 +433,7 @@ export function BrokerConnectionsScreen() {
             </div>
           </div>
         ) : (
-          <div className={styles.tabPanel} role="tabpanel" aria-label="Kotak Neo setup">
+          <div className={styles.tabPanel} role="tabpanel" aria-label="Kotak setup">
             <div className={styles.stepHeader}>
               <span className={styles.stepBadge}>Step 1</span>
               <div>
@@ -446,7 +458,7 @@ export function BrokerConnectionsScreen() {
                     <input
                       id="kotak-access-token"
                       type="text"
-                      placeholder="From the Kotak Neo developer portal"
+                      placeholder="From the Kotak developer portal"
                       value={kotakAccessToken}
                       onChange={onChange(setKotakAccessToken)}
                       autoComplete="off"
@@ -500,7 +512,7 @@ export function BrokerConnectionsScreen() {
               <div>
                 <h2 className={styles.brokerName}>Authorize for today</h2>
                 <p className={styles.brokerNote}>
-                  Required every trading day -- Kotak Neo sessions expire and
+                  Required every trading day -- Kotak sessions expire and
                   must be renewed each morning.
                 </p>
               </div>
@@ -545,18 +557,18 @@ export function BrokerConnectionsScreen() {
             </p>
             <button
               type="button"
-              className={`${styles.button} ${styles.buttonPrimary}`}
+              className={`${styles.button} ${session.kotak ? styles.buttonSecondary : styles.buttonPrimary}`}
               onClick={() => void handleAuthorizeKotak()}
               disabled={kotakAuthorizeDisabled}
               title={configured.kotak ? undefined : "Save step 1 (app setup) before authorizing"}
             >
-              {authState === "authorizing" ? "Authorizing…" : "Authorize for today"}
+              {authState === "authorizing" ? "Authorizing…" : session.kotak ? "Re-authorize Kotak" : "Authorize for today"}
             </button>
           </div>
         )}
       </div>
 
-      <div className={`${styles.card} ${styles.footer}`}>
+      {activeBroker !== "icici" && (!configured[activeBroker] || reconfiguring[activeBroker]) && <div className={`${styles.card} ${styles.footer}`}>
         <span className={styles.footerNote}>
           <span className="material-symbols-outlined" aria-hidden="true">
             lock
@@ -577,10 +589,10 @@ export function BrokerConnectionsScreen() {
             onClick={handleSave}
             disabled={!canSave || saveState === "saving"}
           >
-            {saveState === "saving" ? "Saving…" : "Save gateway"}
+            {saveState === "saving" ? "Saving…" : `Save ${activeBroker === "zerodha" ? "Zerodha" : "Kotak"} configuration`}
           </button>
         </div>
-      </div>
+      </div>}
     </main>
   );
 }

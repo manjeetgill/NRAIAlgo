@@ -1,0 +1,110 @@
+name: nraialgo-staging
+x-api-env: &api-env
+  NODE_ENV: production
+  HOST: 0.0.0.0
+  API_PORT: "4000"
+  TRUST_PROXY: "1"
+  FRONTEND_ORIGIN: https://localhost:8443
+  API_PUBLIC_ORIGIN: https://localhost:8443
+  DATABASE_URL_FILE: /run/secrets/database_url
+  DATABASE_CA_FILE: /run/secrets/database_ca
+  CREDENTIAL_VAULT_KEY_FILE: /run/secrets/vault_key
+  INITIAL_SETUP_TOKEN_FILE: /run/secrets/setup_token
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "3" }
+services:
+  db:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_DB: nraialgo
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+    command: [postgres, -c, ssl=on, -c, ssl_cert_file=/tls/db.crt, -c, ssl_key_file=/tls/db.key, -c, shared_buffers=128MB, -c, max_connections=30]
+    secrets: [postgres_password, app_password]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./secrets/db-tls:/tls:ro
+      - ./init-db.sh:/docker-entrypoint-initdb.d/10-app.sh:ro
+    restart: unless-stopped
+    mem_limit: 384m
+    logging: *logging
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U postgres -d nraialgo"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  api:
+    image: nraialgo-api:f78936c-private
+    build: { context: ../.., target: api }
+    environment: *api-env
+    secrets: [database_url, database_ca, vault_key, setup_token]
+    init: true
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+    mem_limit: 512m
+    stop_grace_period: 45s
+    logging: *logging
+    depends_on:
+      db: { condition: service_healthy }
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:4000/v1/readiness').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 6s
+      retries: 10
+  web:
+    image: nraialgo-web:f78936c-private
+    build: { context: ../.., target: web }
+    init: true
+    read_only: true
+    tmpfs: [/tmp, /app/apps/web/.next/cache]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+    mem_limit: 256m
+    logging: *logging
+    depends_on:
+      api: { condition: service_healthy }
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3010/login').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 6s
+      retries: 10
+  proxy:
+    image: caddy:2-alpine
+    ports: ["127.0.0.1:8443:8443"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./secrets/web-tls:/tls:ro
+    read_only: true
+    tmpfs: [/tmp, /data, /config]
+    restart: unless-stopped
+    mem_limit: 128m
+    logging: *logging
+    depends_on:
+      web: { condition: service_healthy }
+  migrate:
+    profiles: [tools]
+    image: nraialgo-api:f78936c-private
+    command: [node, apps/api/dist/migrate.js]
+    environment:
+      NODE_ENV: production
+      DATABASE_ADMIN_URL_FILE: /run/secrets/database_admin_url
+      DATABASE_CA_FILE: /run/secrets/database_ca
+    secrets: [database_admin_url, database_ca]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+secrets:
+  postgres_password: { file: ./secrets/postgres-password }
+  app_password: { file: ./secrets/app-password }
+  database_url: { file: ./secrets/database-url }
+  database_admin_url: { file: ./secrets/database-admin-url }
+  database_ca: { file: ./secrets/db-tls/db.crt }
+  vault_key: { file: ./secrets/vault-key }
+  setup_token: { file: ./secrets/setup-token }
+volumes:
+  pgdata:

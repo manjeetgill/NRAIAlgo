@@ -28,6 +28,16 @@ describe("Alpha Wire", () => {
     const bse = all.find(p => p.id === "bse")!;
     const xml = '<rss><channel><item><title>Company (123456)</title><description><![CDATA[<p>Quarterly results</p>]]></description><link>https://www.bseindia.com/filing.pdf</link><pubDate>22-Sep-2026 15:48:18</pubDate></item></channel></rss>';
     expect(bse.parse(xml, now)[0]).toMatchObject({ title: "Company (123456) — Quarterly results", publishedAt: "2026-09-22T10:18:18.000Z" });
+    // BSE's own <description> sometimes glues a bare filing-type label
+    // directly onto the real headline with no punctuation -- verified live
+    // (bseindia.com's own feed literally reads "Press Release Brahma raises
+    // AI $150 MILLION..." as one string). A separator gets inserted after
+    // the known label; anything else (already one coherent sentence) is
+    // left untouched.
+    const pressRelease = '<rss><channel><item><title>Prime Focus Ltd (532748)</title><description><![CDATA[Press Release Brahma raises AI  $ 150 MILLION ROUND LED BY MULTIPLES]]></description><link>https://www.bseindia.com/filing2.pdf</link><pubDate>22-Sep-2026 15:48:18</pubDate></item></channel></rss>';
+    expect(bse.parse(pressRelease, now)[0]?.title).toBe("Prime Focus Ltd (532748) — Press Release — Brahma raises AI $ 150 MILLION ROUND LED BY MULTIPLES");
+    const coherent = '<rss><channel><item><title>Prime Focus Ltd (532748)</title><description><![CDATA[Disclosure under Regulation 30 read with Regulation 30A of SEBI Listing Regulations, 2015.]]></description><link>https://www.bseindia.com/filing3.pdf</link><pubDate>22-Sep-2026 15:48:18</pubDate></item></channel></rss>';
+    expect(bse.parse(coherent, now)[0]?.title).toBe("Prime Focus Ltd (532748) — Disclosure under Regulation 30 read with Regulation 30A of SEBI Listing Regulations, 2015.");
     const rbi = all.find(p => p.id === "rbi_notifications")!;
     expect(rbi.parse(xml.replace("22-Sep-2026 15:48:18", "Tue, 22 Sep 2026 15:48:18"), now)[0]?.publishedAt).toBe("2026-09-22T10:18:18.000Z");
     expect(all.find(p => p.id === "pib")?.url).toContain("Lang=1");
@@ -74,6 +84,18 @@ describe("Alpha Wire", () => {
       expect(calls.some(sql=>sql.startsWith('UPDATE alpha_wire_poll_state'))).toBe(true);
     } finally { first.close();second.close(); }
   });
+  it("collapses NSE's own duplicate filing (same title, same pubDate, different PDF attachment) into one item", () => {
+    // Verified live against NSE's real feed: the same "Outcome of Board
+    // Meeting" disclosure filed twice under two different attachment URLs,
+    // seconds apart in submission but sharing one displayed pubDate.
+    const duplicateFiling = `<rss><channel>
+      <item><title>Prime Focus Limited</title><link>https://nsearchives.nseindia.com/corporate/PFOCUS_A.pdf</link><description>Prime Focus Limited has informed the Exchange regarding Outcome of Board Meeting held on September 23, 2026. |SUBJECT: Outcome of Board Meeting</description><pubDate>23-Sep-2026 08:06:53</pubDate></item>
+      <item><title>Prime Focus Limited</title><link>https://nsearchives.nseindia.com/corporate/PFOCUS_B.pdf</link><description>Prime Focus Limited has informed the Exchange regarding Outcome of Board Meeting held on September 23, 2026. |SUBJECT: Outcome of Board Meeting</description><pubDate>23-Sep-2026 08:06:53</pubDate></item>
+    </channel></rss>`;
+    const items = parseAnnouncements(duplicateFiling, new Date("2026-09-23T10:00:00Z"));
+    expect(items).toHaveLength(1);
+  });
+
   it("parses dates, deduplicates, rejects unsafe links and never fabricates publication times", () => {
     const items = parseAnnouncements(xml, new Date("2026-09-22T10:00:00Z"));
     expect(items).toHaveLength(1);

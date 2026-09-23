@@ -12,10 +12,10 @@ let store: Store;
 
 beforeAll(async () => {
   const local = readLocalPostgresConfiguration();
-  const migrationStore = openDatabaseStore(process.env.DATABASE_URL ?? local?.adminUrl);
+  const migrationStore = openDatabaseStore(process.env.TEST_DATABASE_ADMIN_URL ?? process.env.DATABASE_URL ?? local?.adminUrl);
   try {
     await runDatabaseMigrations(migrationStore, {
-      runtimePassword: process.env.DATABASE_URL ? undefined : local?.applicationPassword,
+      runtimePassword: process.env.TEST_DATABASE_RUNTIME_PASSWORD ?? (process.env.DATABASE_URL ? undefined : local?.applicationPassword),
     });
   } finally {
     await migrationStore.close();
@@ -324,7 +324,7 @@ describe("GET /v1/broker-auth/status", () => {
 
     const response = await app.inject({ method: "GET", url: "/v1/broker-auth/status", headers: { cookie } });
 
-    expect(response.json()).toEqual({ zerodha: null, kotak: null });
+    expect(response.json()).toEqual({ zerodha: null, kotak: null, icici: null });
   });
 
   it("one user's session never sees another user's broker session status", async () => {
@@ -343,6 +343,54 @@ describe("GET /v1/broker-auth/status", () => {
 
     const bobStatus = await app.inject({ method: "GET", url: "/v1/broker-auth/status", headers: { cookie: bob.cookie } });
 
-    expect(bobStatus.json()).toEqual({ zerodha: null, kotak: null });
+    expect(bobStatus.json()).toEqual({ zerodha: null, kotak: null, icici: null });
+  });
+});
+
+describe("ICICI Breeze authorization", () => {
+  it("rejects a login completed after app credentials were rotated", async () => {
+    let release!: () => void;
+    let started!: () => void;
+    const entered = new Promise<void>(resolve => { started = resolve; });
+    const held = new Promise<void>(resolve => { release = resolve; });
+    const app = buildServer(store, vault, { iciciLogin: async () => {
+      started(); await held;
+      return { sessionToken: "old-app-session", accountId: "OLD" };
+    } });
+    try {
+      const user = await loginTestUser(app, store, "icici-rotation-race@example.com");
+      await saveAppCredentials(app, user.cookie, "icici", { apiKey: "old-key", apiSecret: "old-secret" });
+      const login = app.inject({ method: "POST", url: "/v1/broker-auth/icici/login", headers: { cookie: user.cookie }, payload: { sessionToken: "daily" } }).then(response => response);
+      await entered;
+      await saveAppCredentials(app, user.cookie, "icici", { apiKey: "new-key", apiSecret: "new-secret" });
+      release();
+      expect((await login).statusCode).toBe(502);
+      expect((await app.inject({ method: "GET", url: "/v1/broker-auth/status", headers: { cookie: user.cookie } })).json().icici).toBeNull();
+    } finally { release?.(); await app.close(); }
+  });
+  it("encrypts credentials and sessions, scopes account reads, and invalidates rotated credentials", async () => {
+    const app = buildServer(store, vault, {
+      iciciLogin: async () => ({ sessionToken: "private-breeze-session", accountId: "IC001" }),
+      iciciAccount: async (_credentials, session) => ({ provider: "icici", accountId: session.accountId, asOf: new Date().toISOString(), sections: {} }),
+    });
+    const alice = await loginTestUser(app, store, "icici-alice@example.com");
+    const bob = await loginTestUser(app, store, "icici-bob@example.com");
+    const credentials = { apiKey: "breeze-api-key", apiSecret: "breeze-private-secret" };
+    await saveAppCredentials(app, alice.cookie, "icici", credentials);
+    const loginUrl = await app.inject({ method: "GET", url: "/v1/broker-auth/icici/login-url", headers: { cookie: alice.cookie } });
+    expect(new URL(loginUrl.json().url).searchParams.get("api_key")).toBe(credentials.apiKey);
+    const login = await app.inject({ method: "POST", url: "/v1/broker-auth/icici/login", headers: { cookie: alice.cookie }, payload: { sessionToken: "daily-token" } });
+    expect(login.statusCode).toBe(204);
+    const rows = await store.transaction((query) => query<{ ciphertext: string }>("SELECT ciphertext FROM broker_sessions WHERE workspace_id=$1 AND provider='icici'", [alice.workspaceId]));
+    expect(rows[0]?.ciphertext).not.toContain("private-breeze-session");
+    expect(vault.open(`${alice.workspaceId}:icici:session`, rows[0]!.ciphertext)).toMatchObject({ accountId: "IC001" });
+    const result = await app.inject({ method: "GET", url: "/v1/broker-auth/icici/account", headers: { cookie: alice.cookie } });
+    expect(result.json().accountId).toBe("IC001");
+    expect(result.body).not.toContain("private-breeze-session");
+    expect((await app.inject({ method: "GET", url: "/v1/broker-auth/icici/account", headers: { cookie: bob.cookie } })).statusCode).toBe(409);
+    expect((await app.inject({ method: "GET", url: "/v1/broker-auth/icici/account" })).statusCode).toBe(401);
+    await saveAppCredentials(app, alice.cookie, "icici", credentials);
+    expect((await app.inject({ method: "GET", url: "/v1/broker-auth/icici/account", headers: { cookie: alice.cookie } })).statusCode).toBe(409);
+    await app.close();
   });
 });

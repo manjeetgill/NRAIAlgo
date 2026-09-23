@@ -9,7 +9,7 @@
  */
 import { openDatabaseStore, runDatabaseMigrations, verifyRuntimeDatabase } from "./database.js";
 import { readLocalPostgresConfiguration } from "./local-database.js";
-import { hashPassword } from "./auth.js";
+import { setUserPassword } from "./auth.js";
 import { loadSecretFiles } from "./production-config.js";
 
 function readArg(name: string): string | undefined {
@@ -46,14 +46,7 @@ async function main() {
     if (process.env.NODE_ENV !== "production") await runDatabaseMigrations(store, {
       runtimePassword: process.env.DATABASE_URL ? undefined : local?.applicationPassword,
     });
-    const passwordHash = hashPassword(password);
-    await store.transaction((query) =>
-      query(
-        `INSERT INTO users (email, password_hash) VALUES ($1,$2)
-         ON CONFLICT (email) DO UPDATE SET password_hash=EXCLUDED.password_hash`,
-        [email, passwordHash],
-      ),
-    );
+    await setUserPassword(store, email, password);
     console.log(`User ${email} is ready.`);
   } finally {
     await store.close();

@@ -1,5 +1,6 @@
 "use client";
 
+import { BrokerHealth } from "@/app/app/overview/broker-health";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
@@ -75,15 +76,11 @@ export function Shell({ children, extraHeaderBar, email, onSignOut }: ShellProps
         <div className={styles.stripLabel}>
           <span className={styles.stripDot} aria-hidden="true" />
           <span className={styles.stripText}>
-            {stale ? "Connection interrupted · showing last received account data" : isLive ? "Live account view · real brokerage balances · execution controls unavailable" : snapshot ? "Preview account view · execution controls unavailable" : "Account monitoring · awaiting verified session data"}
+            {stale ? "Connection interrupted · showing last received account data" : isLive ? "Latest broker snapshot · read-only workspace" : snapshot ? "Preview account view · execution controls unavailable" : "Account monitoring · awaiting verified session data"}
           </span>
         </div>
         <div className={styles.stripRight}>
-          <div className={styles.stripPings}>
-            <span>Zerodha: --</span>
-            <span>&middot;</span>
-            <span>Kotak Neo: --</span>
-          </div>
+          <BrokerHealth snapshot={snapshot} stale={stale} compact />
           <button type="button" className={styles.modeButton} disabled title="Not wired yet">
             <span className={`material-symbols-outlined ${styles.navIcon}`} aria-hidden="true">
               swap_horiz
@@ -124,16 +121,10 @@ export function Shell({ children, extraHeaderBar, email, onSignOut }: ShellProps
         </div>
 
         <div className={styles.accountArea}>
-          <ThemeToggle />
+          <details className={styles.accountMenu}><summary title={email ?? "Account"}>{email ?? "Not signed in"}</summary><div><Link href="/app/broker-connections">Account settings & broker connections</Link><ThemeToggle />{email && onSignOut && <button type="button" onClick={onSignOut}>Sign out</button>}</div></details>
           <div className={styles.accountBadgeStack}>
-            <span className={styles.accountBadge}>{email ?? "Not signed in"}</span>
-            {email && onSignOut ? (
-              <button type="button" className={styles.accountSub} onClick={onSignOut}>
-                Sign out
-              </button>
-            ) : (
-              <span className={styles.accountSub}>No active session</span>
-            )}
+
+            {!email && <span className={styles.accountSub}>No active session</span>}
           </div>
           <span className={styles.avatar} aria-hidden="true">
             <span className="material-symbols-outlined" aria-label="Account">
@@ -210,8 +201,9 @@ export function Shell({ children, extraHeaderBar, email, onSignOut }: ShellProps
         </nav>
 
         <main id="main-content" className={styles.main}>
-          <AlphaWire enabled={!!email} />
+          {pathname === "/app/overview" && <AlphaWire enabled={!!email} initiallyCollapsed />}
           {children}
+          {pathname !== "/app/overview" && <AlphaWire key={pathname} enabled={!!email} initiallyCollapsed />}
         </main>
       </div>
     </div>

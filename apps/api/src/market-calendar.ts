@@ -14,6 +14,7 @@
  * "market-open"/"after-close" guess -- failing closed, not open.
  */
 import type { Query } from "./database.js";
+import { z } from "zod";
 import type { SessionData } from "@nraialgo/contracts";
 import { KNOWN_HOLIDAY_YEARS, NSE_HOLIDAY_CALENDAR_SOURCE, NSE_HOLIDAY_CALENDAR_VERSION, nseHolidayName } from "./nse-holidays.js";
 
@@ -62,17 +63,10 @@ export async function seedNseCalendar(
     const weekday = new Date(`${dateKey}T00:00:00Z`).getUTCDay();
     const isWeekend = weekday === 0 || weekday === 6;
     const year = Number(dateKey.slice(0, 4));
+    if (!KNOWN_HOLIDAY_YEARS.has(year)) continue;
 
     let holidayName: string | null = null;
     if (!isWeekend) {
-      if (!KNOWN_HOLIDAY_YEARS.has(year)) {
-        // No verified holiday data for this year -- leave the day unseeded
-        // rather than guessing it's an ordinary trading day. A later run
-        // (once that year's holidays are added to nse-holidays.ts) can
-        // still seed it; ON CONFLICT DO NOTHING below never overwrites a
-        // day that already got a real answer some other way.
-        continue;
-      }
       holidayName = nseHolidayName(dateKey);
     }
     const isTradingDay = !isWeekend && !holidayName;
@@ -80,9 +74,13 @@ export async function seedNseCalendar(
 
     await query(
       `INSERT INTO market_calendar
-         (exchange, segment, trading_day, is_trading_day, closure_reason, pre_open_start, market_open, market_close)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-       ON CONFLICT (exchange, segment, trading_day) DO NOTHING`,
+         (exchange, segment, trading_day, is_trading_day, closure_reason, pre_open_start, market_open, market_close, managed_version)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       ON CONFLICT (exchange, segment, trading_day) DO UPDATE SET
+         is_trading_day=EXCLUDED.is_trading_day, closure_reason=EXCLUDED.closure_reason,
+         pre_open_start=EXCLUDED.pre_open_start, market_open=EXCLUDED.market_open,
+         market_close=EXCLUDED.market_close, managed_version=EXCLUDED.managed_version
+       WHERE market_calendar.managed_version LIKE 'seed:%'`,
       [
         exchange,
         segment,
@@ -92,6 +90,7 @@ export async function seedNseCalendar(
         isTradingDay ? istBoundary(dateKey, NSE_PRE_OPEN_START_MINUTES) : null,
         isTradingDay ? istBoundary(dateKey, NSE_MARKET_OPEN_START_MINUTES) : null,
         isTradingDay ? istBoundary(dateKey, NSE_MARKET_CLOSE_MINUTES) : null,
+        `seed:${NSE_HOLIDAY_CALENDAR_VERSION}`,
       ],
     );
   }
@@ -100,10 +99,49 @@ export async function seedNseCalendar(
       `INSERT INTO calendar_metadata (exchange, segment, source, version, imported_at)
        VALUES ($1,$2,$3,$4,now())
        ON CONFLICT (exchange, segment)
-       DO UPDATE SET source=EXCLUDED.source, version=EXCLUDED.version, imported_at=now()`,
+       DO UPDATE SET source=EXCLUDED.source, version=EXCLUDED.version, imported_at=now()
+       WHERE calendar_metadata.source = EXCLUDED.source`,
       [exchange, segment, NSE_HOLIDAY_CALENDAR_SOURCE, NSE_HOLIDAY_CALENDAR_VERSION],
     );
   }
+}
+
+const daySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(v => Number.isFinite(Date.parse(v)) && new Date(v).toISOString().slice(0,10) === v);
+export const calendarImportSchema = z.object({
+  source: z.string().url().startsWith("https://"), version: z.string().min(1).max(100),
+  days: z.array(z.object({
+    day: daySchema, trading: z.boolean(), reason: z.string().min(1).max(300).nullable(),
+    preOpen: z.string().datetime({offset:true}).nullable(),
+    open: z.string().datetime({offset:true}).nullable(), close: z.string().datetime({offset:true}).nullable(),
+  }).strict()).min(1).max(730),
+}).strict();
+
+/** Explicit operator import: replaces the listed dates only, including weekend sessions.
+ * Must run inside a transaction. Generated seeds cannot overwrite imported dates. */
+export async function importCalendar(query: Query, value: unknown, exchange = "NSE", segment = "EQ") {
+  const data = calendarImportSchema.parse(value);
+  if (new Set(data.days.map(d => d.day)).size !== data.days.length) throw new Error("Duplicate calendar dates");
+  for (const d of data.days) {
+    if (d.trading) {
+      if (!d.preOpen || !d.open || !d.close || !(Date.parse(d.preOpen) <= Date.parse(d.open) && Date.parse(d.open) < Date.parse(d.close)) ||
+          [d.preOpen,d.open,d.close].some(t => istDateKey(new Date(t)) !== d.day)) throw new Error("Invalid session boundaries");
+    } else if (d.preOpen || d.open || d.close || !d.reason) throw new Error("Closed dates require a reason and no boundaries");
+  }
+  for (const d of data.days) await query(`INSERT INTO market_calendar
+    (exchange,segment,trading_day,is_trading_day,closure_reason,pre_open_start,market_open,market_close,managed_version)
+    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(exchange,segment,trading_day) DO UPDATE SET
+    is_trading_day=EXCLUDED.is_trading_day,closure_reason=EXCLUDED.closure_reason,
+    pre_open_start=EXCLUDED.pre_open_start,market_open=EXCLUDED.market_open,market_close=EXCLUDED.market_close,
+    managed_version=EXCLUDED.managed_version`, [exchange,segment,d.day,d.trading,d.reason,d.preOpen,d.open,d.close,`import:${data.version}`]);
+  await query(`INSERT INTO calendar_metadata(exchange,segment,source,version,imported_at) VALUES($1,$2,$3,$4,now())
+    ON CONFLICT(exchange,segment) DO UPDATE SET source=EXCLUDED.source,version=EXCLUDED.version,imported_at=now()`, [exchange,segment,data.source,data.version]);
+}
+
+export async function calendarCoverage(query: Query, now = new Date()) {
+  const from = istDateKey(now);
+  const [row] = await query<{covered:number}>(`SELECT count(*)::int AS covered FROM market_calendar
+    WHERE exchange='NSE' AND segment='EQ' AND trading_day >= $1::date AND trading_day < $1::date + 45`, [from]);
+  return { status: row?.covered === 45 ? "ok" : "coverage_expiring", coveredDays: row?.covered ?? 0, requiredDays: 45 };
 }
 
 /** Resolve session state from configured calendar rows, never from hard-coded

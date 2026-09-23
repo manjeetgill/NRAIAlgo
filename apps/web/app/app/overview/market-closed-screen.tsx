@@ -1,15 +1,17 @@
+import { UpdatedAt } from "./updated-at";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import type { OverviewSnapshot, Panel } from "@nraialgo/contracts";
 import { formatPaise, formatTimestamp } from "./format";
 import shared from "./market-open.module.css";
 import styles from "./market-closed.module.css";
+import { PortfolioTable, type PortfolioRow } from "./portfolio-table";
 
 function Card({ title, badge, children }: { title: string; badge?: string; children: ReactNode }) {
   return <section className={styles.card} aria-label={title}><header className={styles.cardHeader}><h2>{title}</h2>{badge && <span className={shared.tag}>{badge}</span>}</header>{children}</section>;
 }
 function Source({ panel }: { panel: Panel<unknown> }) {
-  return <div className={shared.provenance}>{panel.reason && <span className={shared.warning}>{panel.reason}</span>}<span>Source: {panel.source} · As of {formatTimestamp(panel.asOf)} IST</span></div>;
+  return <details className={shared.provenance}><summary>Source & refresh {panel.status !== "available" ? "*" : ""}</summary><UpdatedAt value={panel.asOf}/><p>Source: {panel.source}</p><span>{panel.reason}</span></details>;
 }
 function Money({ value }: { value: number | null | undefined }) {
   return <span className={value == null ? shared.muted : value < 0 ? shared.negative : undefined}>{value == null ? "—" : formatPaise(value)}</span>;
@@ -19,11 +21,12 @@ const STATUS: Record<string, string> = { passed: "Passed", failed: "Failed", unk
 
 /** Calendar selects this view; a closed exchange does not settle an account,
  * revoke a broker token, flatten exposure, or authorize the next deployment. */
-export function MarketClosedScreen({ snapshot, layout }: { snapshot: OverviewSnapshot; layout?: "after-close" | "weekend-holiday" }) {
+export function MarketClosedScreen({ snapshot, layout, accountHoldings }: { snapshot: OverviewSnapshot; layout?: "after-close" | "weekend-holiday"; accountHoldings?: { rows: PortfolioRow[]; complete: boolean } }) {
   const weekend = (layout ?? snapshot.session.data?.state) === "weekend-holiday";
   const actuallyClosed = snapshot.session.data?.calendarValid && (snapshot.session.data.state === "after-close" || snapshot.session.data.state === "weekend-holiday");
   const session = snapshot.session.data;
-  const pnl = snapshot.pnl.data;
+  const pnl = snapshot.pnl.status === "available" ? snapshot.pnl.data : null;
+  const perf = pnl?.performance;
   const holdings = snapshot.holdings.data;
   const deployment = snapshot.deployment.data;
   const expired = snapshot.connections.data?.filter(connection => connection.status === "session_expired") ?? [];
@@ -33,7 +36,9 @@ export function MarketClosedScreen({ snapshot, layout }: { snapshot: OverviewSna
       : snapshot.readiness.data?.checks[key as keyof typeof CHECKS] ?? { status: "unknown", reason: "No verification available" },
   }));
   const passed = checks.filter(({ check }) => check.status === "passed").length;
-  const holdingValue = holdings ? holdings.holdings.reduce((sum, holding) => sum + holding.marketValuePaise, 0) : null;
+  const holdingRows = accountHoldings?.rows ?? holdings?.holdings ?? [];
+  const complete = accountHoldings?.complete ?? snapshot.holdings.status === "available";
+  const holdingValue = complete && holdingRows.every(row => row.marketValuePaise != null) ? holdingRows.reduce((sum, row) => sum + row.marketValuePaise!, 0) : null;
   const positions = snapshot.positions?.data;
   const reportedPositions = positions?.filter(position => position.quantity !== 0);
   const reconciled = pnl?.reconciliationStatus === "reconciled" && pnl.netPaise !== null;
@@ -65,18 +70,30 @@ export function MarketClosedScreen({ snapshot, layout }: { snapshot: OverviewSna
         <p className={styles.caption}>{pnl?.netPaise != null ? "Net P&L" : "Gross position P&L · net pending charges"}</p>
         <dl className={styles.inset}><div><dt>Gross P&L</dt><dd><Money value={pnl?.grossPaise} /></dd></div><div><dt>Charges</dt><dd>{pnl?.chargesPaise == null ? "Pending" : <Money value={pnl.chargesPaise} />}</dd></div><div><dt>Net P&L</dt><dd>{pnl?.netPaise == null ? "Unavailable" : <Money value={pnl.netPaise} />}</dd></div></dl>
         {weekend && <div className={styles.chartEmpty}><span className="material-symbols-outlined" aria-hidden="true">show_chart</span><strong>Weekly equity history unavailable</strong><span>Daily stored results are needed for a cumulative curve; the account snapshot is not a weekly return.</span></div>}
-        <div className={styles.statistics}>{["Win ratio", "Profit factor", "Sharpe", "Max drawdown"].map(label => <div key={label}><span>{label}</span><strong>—</strong></div>)}</div>
+        <div className={styles.statistics}>
+          {/* Day-level, not trade-level: there is no per-trade win/loss data
+              yet, so this must never be labeled "Win ratio" (which would
+              imply per-trade granularity it doesn't have). Derived from
+              session_pnl_history -- see session-performance.ts. */}
+          <div><span>Day win rate</span><strong>{perf?.dayWinRatePct != null ? `${perf.dayWinRatePct}%` : "—"}</strong></div>
+          {/* Needs trade-level fills (entries/exits per instrument), not
+              just daily gross P&L -- out of scope until that exists. */}
+          <div><span>Profit factor</span><strong>—</strong></div>
+          <div><span>Sharpe</span><strong>{perf?.sharpe != null ? perf.sharpe.toFixed(2) : perf ? `${perf.sessionsRecorded}/${perf.sessionsRequiredForSharpe} sessions` : "—"}</strong></div>
+          <div><span>Max drawdown</span><strong>{perf?.maxDrawdownPaise != null ? formatPaise(perf.maxDrawdownPaise) : "—"}</strong></div>
+        </div>
         <Source panel={snapshot.pnl} />
         <details className={styles.disclosure}><summary>View P&L breakdown</summary><dl className={styles.inset}><div><dt>Realised</dt><dd><Money value={pnl?.realisedPaise} /></dd></div><div><dt>Unrealised</dt><dd><Money value={pnl?.unrealisedPaise} /></dd></div></dl><p>Reconciliation: {pnl?.reconciliationStatus ?? "Unknown"}. Market close alone does not make these figures final.</p></details>
       </Card>
 
       <Card title={weekend ? "Securities & Demat" : "Demat Holdings"} badge="Account snapshot">
-        <p className={styles.caption}>Reported holdings value</p><div className={styles.bigNumber}><Money value={holdingValue} /></div>
+        <p className={styles.caption}>{complete ? "Reported holdings value" : "Total withheld — selected account data incomplete"}</p><div className={styles.bigNumber}><Money value={holdingValue} /></div>
+        <p className={styles.caption}>Margin and collateral below cover the overview feed only; bank balances are not margin.</p>
         <dl className={styles.inset}><div><dt>Margin deployed</dt><dd><Money value={holdings?.usedMarginPaise} /></dd></div><div><dt>Available margin</dt><dd><Money value={holdings?.availableMarginPaise} /></dd></div><div><dt>Pledged collateral</dt><dd><Money value={holdings?.collateralPaise} /></dd></div></dl>
-        <ul className={styles.holdings}>{holdings?.holdings.slice(0, 3).map(holding => <li key={`${holding.provider}:${holding.accountId}:${holding.symbol}`}><span><strong>{holding.symbol}</strong><small>{holding.quantity} units · {holding.provider}</small></span><Money value={holding.marketValuePaise} /></li>)}</ul>
-        {holdings?.holdings.length === 0 && <p className={styles.caption}>No holdings reported by the connected sources.</p>}
-        <Source panel={snapshot.holdings} />
-        <details className={styles.disclosure}><summary>Holdings & collateral details</summary>{holdings ? <ul className={styles.holdings}>{holdings.holdings.map(holding => <li key={`${holding.provider}:${holding.accountId}:${holding.symbol}`}><span>{holding.symbol}<small>{holding.provider} · {holding.accountId} · {holding.quantity} units</small></span><Money value={holding.marketValuePaise} /></li>)}</ul> : <p>Holdings data unavailable.</p>}</details>
+        <ul className={styles.holdings}>{holdingRows.slice(0, 3).map(holding => <li key={`${holding.provider}:${holding.accountId}:${holding.symbol}`}><span><strong>{holding.symbol}</strong><small>{holding.quantity} units · {holding.provider}</small></span><Money value={holding.marketValuePaise} /></li>)}</ul>
+        {holdingRows.length === 0 && <p className={styles.caption}>{complete ? "No holdings reported by the connected sources." : "Holdings unavailable for the selected accounts."}</p>}
+        {accountHoldings ? <p className={styles.caption}>Holdings use the selected account snapshots; see Broker data sources &amp; refresh status below. Margin feed: {snapshot.holdings.source} · {snapshot.holdings.status}.</p> : <Source panel={snapshot.holdings} />}
+        <details className={styles.disclosure}><summary>Holdings & collateral details</summary><PortfolioTable rows={holdingRows} available={complete} /></details>
       </Card>
 
       <Card title={weekend ? "Execution Engines" : "Strategy Posture"} badge={deployment?.workerStatus ?? "Unknown"}>

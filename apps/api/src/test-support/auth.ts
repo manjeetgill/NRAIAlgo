@@ -13,12 +13,13 @@ export async function loginTestUser(
   store: Store,
   email: string,
 ): Promise<{ cookie: string; workspaceId: string }> {
+  const hash = await hashPassword(TEST_PASSWORD);
   const rows = await store.transaction((query) =>
     query<{ id: string }>(
       `INSERT INTO users (email, password_hash) VALUES ($1,$2)
        ON CONFLICT (email) DO UPDATE SET password_hash=EXCLUDED.password_hash
        RETURNING id`,
-      [email, hashPassword(TEST_PASSWORD)],
+      [email, hash],
     ),
   );
   const workspaceId = rows[0]?.id;

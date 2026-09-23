@@ -1,4 +1,4 @@
-.wire { position: sticky; top: 36px; z-index: 19; padding: 12px 20px; background: var(--color-surface-base); border-bottom: 1px solid var(--color-border-subtle); color: var(--color-text-primary); min-width: 0; }
+.wire { position: relative; padding: 12px 20px; background: var(--color-surface-base); border-bottom: 1px solid var(--color-border-subtle); color: var(--color-text-primary); min-width: 0; }
 .toolbar, .filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .brand { font-size: 12px; letter-spacing: .08em; }
 .brand span { color: var(--color-primary); }
@@ -28,3 +28,5 @@
 .sourceStatus { font-size: 11px; line-height: 1.7; color: var(--color-text-muted); max-height: 160px; overflow: auto; }
 .sourceStatus summary { cursor: pointer; }
 @media (max-width: 767px) { .wire { top: 0; padding: 8px 12px; } .status, .healthy { flex-basis: 100%; order: 3; } .filters button:disabled { display: none; } .filters input { width: 130px; } .caption { display: none; } .dialog .caption { display: block; } .wire .card { flex-basis: 250px; } }
+
+@media (max-width: 768px) { .wire:has(button[aria-expanded="false"]) .toolbar { flex-wrap: nowrap; } .wire:has(button[aria-expanded="false"]) .status, .wire:has(button[aria-expanded="false"]) .healthy { display: none; } }

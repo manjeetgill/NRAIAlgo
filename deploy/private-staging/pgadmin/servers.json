@@ -1,0 +1,20 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "NRAIAlgo staging (read only)",
+      "Group": "Private staging",
+      "Host": "db",
+      "Port": 5432,
+      "MaintenanceDB": "nraialgo",
+      "DBRestriction": "nraialgo",
+      "Username": "nraialgo_browser",
+      "SSLMode": "verify-full",
+      "ConnectionParameters": {
+        "sslmode": "verify-full",
+        "sslrootcert": "db.crt",
+        "passfile": ".pgpass",
+        "connect_timeout": 10
+      }
+    }
+  }
+}

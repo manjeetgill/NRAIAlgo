@@ -6,6 +6,9 @@ import type { credentialVault } from "../credential-vault.js";
 import { createZerodhaLoginUrl, exchangeZerodhaRequestToken, nextKiteExpiry } from "../broker-auth/zerodha.js";
 import { kotakDailyLogin, kotakSessionExpiry, KotakLoginError } from "../broker-auth/kotak.js";
 import { requireAuth } from "./auth.js";
+import { iciciCredentials, iciciSession, iciciLogin, iciciAccount } from "../broker-auth/icici.js";
+import { IciciLiveMarket } from "../market-data/icici-live.js";
+import { resolveSession, SESSION_COOKIE_NAME } from "../auth.js";
 
 const zerodhaAppCredentials = z.object({ apiKey: z.string(), apiSecret: z.string() });
 const kotakAppCredentials = z.object({ accessToken: z.string(), mobileNumber: z.string(), ucc: z.string() });
@@ -43,10 +46,14 @@ export function brokerAuthRoutes(
   deps: {
     exchangeZerodhaRequestToken?: typeof exchangeZerodhaRequestToken;
     kotakDailyLogin?: typeof kotakDailyLogin;
+    iciciLogin?: typeof iciciLogin;
+    iciciAccount?: typeof iciciAccount;
+    iciciLive?: IciciLiveMarket;
   } = {},
 ) {
   const exchangeZerodha = deps.exchangeZerodhaRequestToken ?? exchangeZerodhaRequestToken;
   const kotakLogin = deps.kotakDailyLogin ?? kotakDailyLogin;
+  const iciciLive = deps.iciciLive ?? new IciciLiveMarket();
 
   function hashState(state: string): string {
     return createHash("sha256").update(state).digest("hex");
@@ -96,20 +103,32 @@ export function brokerAuthRoutes(
     return schema.parse(vault.open(`${workspaceId}:${provider}`, row.ciphertext));
   }
 
-  async function saveSession(workspaceId: string, provider: string, session: unknown, expiresAt: Date) {
+  async function saveSession(workspaceId: string, provider: string, session: unknown, expiresAt: Date, expectedCredentials: unknown) {
     const ciphertext = vault.seal(`${workspaceId}:${provider}:session`, session);
-    await store.transaction((query) =>
-      query(
+    await store.transaction(async (query) => {
+      const [current] = await query<{ ciphertext: string }>(
+        "SELECT ciphertext FROM broker_app_credentials WHERE workspace_id=$1 AND provider=$2 FOR UPDATE", [workspaceId, provider]);
+      // A credential rotation during the external login must not resurrect an
+      // old session. The row lock serializes this check with credential updates.
+      if (!current || JSON.stringify(vault.open(`${workspaceId}:${provider}`, current.ciphertext)) !== JSON.stringify(expectedCredentials)) {
+        throw new Error("Broker credentials changed during authorization; retry");
+      }
+      await query(
         `INSERT INTO broker_sessions (workspace_id, provider, ciphertext, expires_at, updated_at)
          VALUES ($1,$2,$3,$4,now())
          ON CONFLICT (workspace_id, provider)
          DO UPDATE SET ciphertext=EXCLUDED.ciphertext, expires_at=EXCLUDED.expires_at, updated_at=now()`,
         [workspaceId, provider, ciphertext, expiresAt.toISOString()],
-      ),
-    );
+      );
+    });
   }
 
+  const accountReads = new Map<string, { key: string; until: number; pending: ReturnType<typeof iciciAccount> }>();
   return async function routes(app: FastifyInstance): Promise<void> {
+    const liveConnections = new Set<() => void>();
+    const pruneLive = setInterval(() => iciciLive.prune(), 10_000); pruneLive.unref();
+    app.addHook("preClose", async () => { for (const close of [...liveConnections]) close(); });
+    app.addHook("onClose", async () => { clearInterval(pruneLive); iciciLive.close(); });
     // The Zerodha OAuth callback is the one route in this group that must
     // stay public: Zerodha's own server calls it directly, with no session
     // cookie of ours. It authenticates itself via the pending `state` token
@@ -160,7 +179,7 @@ export function brokerAuthRoutes(
         }
         try {
           const session = await exchangeZerodha(credentials.apiKey, credentials.apiSecret, requestToken);
-          await saveSession(pending.workspaceId, "zerodha", session, nextKiteExpiry(new Date()));
+          await saveSession(pending.workspaceId, "zerodha", session, nextKiteExpiry(new Date()), credentials);
           return reply.redirect(`${FRONTEND_ORIGIN}/app/broker-connections?zerodha_auth=success`, 302);
         } catch (error) {
           // The redirect never carries broker error detail (it could leak
@@ -189,7 +208,7 @@ export function brokerAuthRoutes(
         }
         try {
           const session = await kotakLogin({ ...credentials, ...body.data });
-          await saveSession(workspaceId, "kotak", session, kotakSessionExpiry(new Date()));
+          await saveSession(workspaceId, "kotak", session, kotakSessionExpiry(new Date()), credentials);
           return reply.code(204).send();
         } catch (error) {
           if (error instanceof KotakLoginError) {
@@ -211,6 +230,89 @@ export function brokerAuthRoutes(
       },
     );
 
+    app.get("/v1/broker-auth/icici/login-url", async (request, reply) => {
+      const credentials = await loadAppCredentials(request.auth!.workspaceId, "icici", iciciCredentials);
+      if (!credentials) return reply.badRequest("Save ICICI app credentials first.");
+      const url = new URL("https://api.icicidirect.com/apiuser/login");
+      url.searchParams.set("api_key", credentials.apiKey);
+      return { url: url.href };
+    });
+
+    app.post("/v1/broker-auth/icici/login", { config: { rateLimit: { max: 5, timeWindow: "1 minute" } } }, async (request, reply) => {
+      const body = z.object({ sessionToken: z.string().trim().min(1).max(4096) }).strict().safeParse(request.body);
+      if (!body.success) return reply.badRequest("Enter the Breeze API session token.");
+      const workspaceId = request.auth!.workspaceId;
+      const credentials = await loadAppCredentials(workspaceId, "icici", iciciCredentials);
+      if (!credentials) return reply.badRequest("Save ICICI app credentials first.");
+      try {
+        const session = await (deps.iciciLogin ?? iciciLogin)(credentials, body.data.sessionToken);
+        // Conservative application cap; this is not a claim about broker token TTL.
+        const now = new Date();
+        const istDay = new Date(now.getTime() + 330 * 60_000).toISOString().slice(0, 10);
+        const expiry = new Date(new Date(`${istDay}T00:00:00+05:30`).getTime() + 86_400_000);
+        await saveSession(workspaceId, "icici", session, expiry, credentials);
+        return reply.code(204).send();
+      } catch {
+        return reply.code(502).send({ message: "ICICI authorization failed. Check your app credentials and fresh API session token, then retry." });
+      }
+    });
+
+    app.get("/v1/broker-auth/icici/account", { config: { rateLimit: { max: 60, timeWindow: "1 minute" } } }, async (request, reply) => {
+      const workspaceId = request.auth!.workspaceId;
+      const credentials = await loadAppCredentials(workspaceId, "icici", iciciCredentials);
+      const [row] = await store.transaction((query) => query<{ ciphertext: string }>(
+        "SELECT ciphertext FROM broker_sessions WHERE workspace_id=$1 AND provider=$2 AND expires_at > now()", [workspaceId, "icici"]));
+      if (!credentials || !row) { iciciLive.disconnect(workspaceId); return reply.code(409).send({ message: "ICICI is not authorized. Connect it in Broker Gateways." }); }
+      const session = iciciSession.parse(vault.open(`${workspaceId}:icici:session`, row.ciphertext));
+      // Authorize on every request; coalesce tabs only within the same workspace/session.
+      const key = createHash("sha256").update(row.ciphertext + JSON.stringify(credentials)).digest("hex");
+      const cached = accountReads.get(workspaceId);
+      if (cached && cached.key === key && cached.until > Date.now()) return cached.pending;
+      if (accountReads.size >= 200) {
+        for (const [id, entry] of accountReads) if (entry.until <= Date.now()) accountReads.delete(id);
+      }
+      const pending = (deps.iciciAccount ?? iciciAccount)(credentials, session).then(data => {
+        const positions = data.sections.portfoliopositions?.rows ?? [];
+        iciciLive.ensure(workspaceId, session, positions);
+        return data;
+      });
+      if (accountReads.size < 200 || cached) {
+        const entry = { key, until: Date.now() + 10000, pending };
+        accountReads.set(workspaceId, entry);
+        void pending.catch(() => { if (accountReads.get(workspaceId) === entry) accountReads.delete(workspaceId); });
+      }
+      return pending;
+    });
+
+    app.get("/v1/broker-auth/icici/stream", async (request, reply) => {
+      if (liveConnections.size >= 100) return reply.code(503).send({ message: "ICICI live stream capacity reached." });
+      const workspaceId = request.auth!.workspaceId;
+      reply.hijack();
+      const raw = reply.raw;
+      raw.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-store, no-transform, private", "X-Accel-Buffering": "no", Connection: "keep-alive" });
+      raw.flushHeaders();
+      let stopped = false; let busy = false; let scheduled: ReturnType<typeof setTimeout> | undefined;
+      const send = async (validate = false) => {
+        if (stopped || busy) return; busy = true;
+        try {
+          if (validate) {
+            const token = request.cookies[SESSION_COOKIE_NAME];
+            const auth = token ? await resolveSession(store, token) : null;
+            if (!auth || auth.workspaceId !== workspaceId) { close(); return; }
+          }
+          const snapshot = iciciLive.snapshot(workspaceId);
+          if (raw.writableLength > 256_000) close();
+          else raw.write(`event: snapshot\ndata: ${JSON.stringify(snapshot)}\n\n`);
+        } catch { close(); }
+        finally { busy = false; }
+      };
+      const schedule = () => { if (!scheduled) scheduled = setTimeout(() => { scheduled = undefined; void send(); }, 500); };
+      const unsubscribe = iciciLive.subscribe(workspaceId, schedule);
+      const heartbeat = setInterval(() => { void send(true); }, 15_000); heartbeat.unref();
+      const close = () => { if (stopped) return; stopped = true; clearInterval(heartbeat); clearTimeout(scheduled); unsubscribe(); liveConnections.delete(close); raw.end(); };
+      liveConnections.add(close); raw.on("close", close); raw.write("retry: 5000\n\n"); void send();
+    });
+
     /** Whether each provider has a live, unexpired session -- never the session itself. */
     app.get("/v1/broker-auth/status", async (request) => {
       const workspaceId = request.auth!.workspaceId;
@@ -223,6 +325,7 @@ export function brokerAuthRoutes(
       return {
         zerodha: rows.find((row) => row.provider === "zerodha")?.expires_at ?? null,
         kotak: rows.find((row) => row.provider === "kotak")?.expires_at ?? null,
+        icici: rows.find((row) => row.provider === "icici")?.expires_at ?? null,
       };
     });
   };

@@ -59,6 +59,23 @@ export const PnlDataSchema = z
     netPaise: paise().nullable(),
     valuationAsOf: z.iso.datetime().nullable(),
     reconciliationStatus: z.enum(["provisional", "reconciled", "revised"]),
+    // Multi-session performance stats (day win rate, max drawdown, Sharpe),
+    // derived from a persisted history of prior sessions' gross P&L -- see
+    // session-performance.ts. Optional: absent for a per-provider PnlData
+    // before it's combined into the snapshot's final panel, and for any
+    // test/fixture built before this existed.
+    performance: z
+      .object({
+        sessionsRecorded: z.number().int().nonnegative(),
+        sessionsRequiredForSharpe: z.number().int().positive(),
+        // Day-level, not trade-level -- there is no per-trade win/loss data
+        // in this app yet (see the UI's "Day win rate" label, chosen
+        // deliberately so this never implies granularity it doesn't have).
+        dayWinRatePct: z.number().min(0).max(100).nullable(),
+        maxDrawdownPaise: paise().nonnegative().nullable(),
+        sharpe: z.number().nullable(),
+      })
+      .optional(),
   })
   .refine(
     (value) =>
@@ -78,12 +95,23 @@ export type PnlData = z.infer<typeof PnlDataSchema>;
 export const PnlPanelSchema = panel(PnlDataSchema);
 
 export const HoldingRowSchema = z.object({
+  instrumentToken: z.number().int().positive().optional(),
+  priceAsOf: z.iso.datetime().optional(),
+  fresh: z.boolean().optional(),
+  details: z.record(z.string(), z.union([z.string(),z.number().finite(),z.boolean(),z.null()])).optional(),
   provider: z.string().min(1),
   accountId: z.string().min(1),
   symbol: z.string().min(1),
   quantity: z.number(),
   pledgedQuantity: z.number().nullable(),
   marketValuePaise: paise(),
+  isin: z.string().nullable().optional(),
+  exchange: z.string().nullable().optional(),
+  averagePaise: paise().nullable().optional(),
+  ltpPaise: paise().nullable().optional(),
+  investedPaise: paise().nullable().optional(),
+  dayPnlPaise: paise().nullable().optional(),
+  unrealizedPaise: paise().nullable().optional(),
 });
 export const HoldingsDataSchema = z.object({
   holdings: z.array(HoldingRowSchema),
@@ -101,14 +129,17 @@ export type HoldingsData = z.infer<typeof HoldingsDataSchema>;
 export const HoldingsPanelSchema = panel(HoldingsDataSchema);
 
 export const PositionRowSchema = z.object({
+  details: z.record(z.string(), z.union([z.string(),z.number().finite(),z.boolean(),z.null()])).optional(),
   provider: z.string(), accountId: z.string(), instrumentToken: z.number().int().positive(),
   exchange: z.string(), symbol: z.string(), product: z.string(), quantity: z.number(),
   multiplier: z.number().positive(), averagePrice: z.number(), lastPrice: z.number(),
-  pnlPaise: paise(), asOf: z.iso.datetime(), fresh: z.boolean(),
+  previousClose: z.number().positive().nullable().optional(),
+  pnlPaise: paise(), mtmPaise: paise().nullable().optional(), asOf: z.iso.datetime(), fresh: z.boolean(),
 });
 export type PositionRow = z.infer<typeof PositionRowSchema>;
 export const PositionsPanelSchema = panel(z.array(PositionRowSchema));
 export const BrokerOrdersPanelSchema = panel(z.array(z.object({
+  details: z.record(z.string(), z.union([z.string(),z.number().finite(),z.boolean(),z.null()])).optional(),
   orderId: z.string(), symbol: z.string(), exchange: z.string(), product: z.string(),
   side: z.string(), status: z.string(), quantity: z.number(), filledQuantity: z.number(),
   averagePrice: z.number(),
@@ -180,8 +211,10 @@ export const ConnectionEntrySchema = z
     status: z.enum([
       "streaming",
       "connected",
+      "degraded",
       "session_expired",
       "session_ended",
+      "partially_connected",
     ]),
     latencyMs: z.number().int().nonnegative().nullable(),
     asOf: z.iso.datetime(),

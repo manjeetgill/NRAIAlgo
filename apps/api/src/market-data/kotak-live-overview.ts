@@ -2,7 +2,7 @@ import type { OverviewSnapshot } from "@nraialgo/contracts";
 import type { KotakInputs } from "../build-overview-snapshot.js";
 import { createKotakFeed, type KotakFactory, type KotakFeed, type KotakState } from "./kotak-feed.js";
 import { accountIsStale, degradeAccountPanels } from "./account-freshness.js";
-type Entry={credentials:KotakInputs; feed:KotakFeed;usedAt:number;market:KotakState;orders:KotakState;pending:boolean;generation:number;ticks:Map<string,{price:number;sourceAt:number;receivedAt:number}>};
+type Entry={credentials:KotakInputs; feed:KotakFeed;usedAt:number;market:KotakState;orders:KotakState;pending:boolean;generation:number;ticks:Map<string,{price:number;previousClose:number|null;sourceAt:number;receivedAt:number}>};
 export class KotakLiveOverview {
   private entries=new Map<string,Entry>();
   private generation=0;
@@ -25,7 +25,7 @@ export class KotakLiveOverview {
       }else if(message.type==='order'){created.pending=true;created.generation=++this.generation;}
       else if(Number.isFinite(message.price)&&message.price>0&&message.sourceAt<=now+5000&&message.sourceAt>0){
         const previous=created.ticks.get(message.key);
-        if(!previous||message.sourceAt>=previous.sourceAt) created.ticks.set(message.key,{price:message.price,sourceAt:message.sourceAt,receivedAt:now});
+        if(!previous||message.sourceAt>=previous.sourceAt) created.ticks.set(message.key,{price:message.price,previousClose:message.previousClose??previous?.previousClose??null,sourceAt:message.sourceAt,receivedAt:now});
       }
     });
   }
@@ -51,7 +51,13 @@ export class KotakLiveOverview {
       const tick=e.ticks.get(`${row.exchange}|${row.instrumentToken}`);
       if(!open||accountStale||e.pending||e.market!=='streaming'||!tick||now-tick.receivedAt>15000||now-tick.sourceAt>15000||tick.sourceAt<Date.parse(row.asOf))continue;
       const change=Math.round((tick.price-row.lastPrice)*row.quantity*row.multiplier*100);
-      row.lastPrice=tick.price;row.pnlPaise+=change;row.asOf=new Date(tick.sourceAt).toISOString();row.fresh=true;freshCount++;delta+=change;updated=true;
+      row.lastPrice=tick.price;row.previousClose=tick.previousClose;row.mtmPaise=tick.previousClose==null?null:Math.round((tick.price-tick.previousClose)*row.quantity*row.multiplier*100);row.pnlPaise+=change;row.asOf=new Date(tick.sourceAt).toISOString();row.fresh=true;freshCount++;delta+=change;updated=true;
+    }
+    const attributed = snapshot.brokerPnl?.kotak;
+    if (updated && attributed?.data) {
+      attributed.data.grossPaise += delta; attributed.data.unrealisedPaise += delta;
+      if (attributed.data.netPaise != null) attributed.data.netPaise += delta;
+      attributed.data.valuationAsOf = iso; attributed.source = "kotak+kotak-tick-estimate";
     }
     if(updated&&snapshot.pnl.data){snapshot.pnl.data.grossPaise+=delta;snapshot.pnl.data.unrealisedPaise+=delta;if(snapshot.pnl.data.netPaise!==null)snapshot.pnl.data.netPaise+=delta;snapshot.pnl.data.valuationAsOf=iso;snapshot.pnl.source+='+kotak-tick-estimate';}
     if(accountStale||e.pending)degradeAccountPanels(snapshot,'Kotak');

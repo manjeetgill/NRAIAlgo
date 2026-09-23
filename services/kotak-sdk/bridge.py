@@ -139,10 +139,15 @@ def tick_message(message):
         return None
     key = f"{message.exchange_segment}|{message.instrument_token}"
     price = float(message.last_traded_price)
+    # kotakneoapi 3.x exposes the exchange's prior close as ``close_price``
+    # on both SFeedScrip and SFeedScripLite. Keep the older alias as a
+    # compatibility fallback for previously released SDK payloads.
+    raw_close = getattr(message, "close_price", getattr(message, "closing_price", None))
+    previous_close = float(raw_close) if raw_close is not None else None
     timestamp = int(message.last_update_time) * 1000
     if not TOKEN.fullmatch(key) or not math.isfinite(price) or price <= 0 or timestamp <= 0:
         return None
-    return dict(type="tick", key=key, price=price, sourceAt=timestamp)
+    return dict(type="tick", key=key, price=price, previousClose=previous_close if previous_close is not None and math.isfinite(previous_close) and previous_close > 0 else None, sourceAt=timestamp)
 
 
 async def consume_feed(feed, deliver, stopping, reconnect_timeout=120):

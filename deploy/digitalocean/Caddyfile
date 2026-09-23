@@ -23,6 +23,13 @@
       header_up X-Forwarded-Proto {scheme}
     }
   }
+  handle /v1/broker-auth/icici/stream {
+    reverse_proxy api:4000 {
+      flush_interval -1
+      header_up X-Forwarded-For {remote_host}
+      header_up X-Forwarded-Proto {scheme}
+    }
+  }
   handle /v1/* {
     reverse_proxy api:4000 {
       header_up X-Forwarded-For {remote_host}

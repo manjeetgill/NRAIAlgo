@@ -7,6 +7,7 @@ import { buildOverviewSnapshot, loadOverviewInputs } from "../build-overview-sna
 import { requireAuth } from "./auth.js";
 import { LiveOverview } from "../market-data/live-overview.js";
 import { KotakLiveOverview } from "../market-data/kotak-live-overview.js";
+import { recordSessionGrossPnl } from "../session-performance.js";
 
 const scopeQuery = z.object({
   exchange: z.literal("NSE").default("NSE"),
@@ -20,6 +21,13 @@ const scopeQuery = z.object({
 });
 
 const CACHE_TTL_MS = 10_000; // account REST reconciliation, not tick cadence
+
+export function isFullyReconciledForPerformance(snapshot: OverviewSnapshot): boolean {
+  const configuredProviders = snapshot.configuredProviders ?? [];
+  return snapshot.pnl.status === "available" && configuredProviders.length > 0 && configuredProviders.every(provider =>
+    provider !== "icici" && snapshot.brokerReconciliation?.[provider]?.status === "confirmed",
+  );
+}
 
 /** GET /v1/overview: the whole Overview screen in one response.
  * workspaceId/accountId now come from the authenticated session
@@ -61,6 +69,19 @@ export function overviewRoutes(store: Store, vault: ReturnType<typeof credential
       const snapshot = await buildOverviewSnapshot(inputs, new Date(), scope);
       if (snapshot.brokerReconciliation?.zerodha?.status === 'confirmed' && snapshot.brokerReconciliation.zerodha.accountId === inputs.zerodha?.accountId) live.reconciled(scope.workspaceId, zerodhaVersion);
       if (snapshot.brokerReconciliation?.kotak?.status === 'confirmed' && snapshot.brokerReconciliation.kotak.accountId === inputs.kotak?.accountId) kotakLive.reconciled(scope.workspaceId, kotakVersion);
+      // Record today's gross P&L against its trading day once the session
+      // has actually closed -- never mid-day, which would freeze a partial
+      // figure. Upserts, so it keeps refining as evening reconciliation
+      // continues (see market-closed-screen's own "reconciliation
+      // continues after market close"). Never blocks the response.
+      const closedState = snapshot.session.data?.state === "after-close" || snapshot.session.data?.state === "weekend-holiday";
+      const tradingDay = snapshot.session.data?.lastCompletedSession;
+      if (closedState && tradingDay && snapshot.pnl.data && isFullyReconciledForPerformance(snapshot)) {
+        const grossPaise = snapshot.pnl.data.grossPaise;
+        await store
+          .transaction((query) => recordSessionGrossPnl(query, scope.workspaceId, tradingDay, grossPaise))
+          .catch(() => {});
+      }
       entry.snapshot = snapshot;
       entry.expiresAt = Date.now() + CACHE_TTL_MS;
       return snapshot;

@@ -21,6 +21,9 @@ export function expireOverviewSnapshot(base: OverviewSnapshot, now: number, rece
   for (const row of next.positions?.data ?? []) {
     if (row.fresh && expired(row.asOf, 15_000)) { row.fresh = false; changed = true; }
   }
+  for (const row of next.holdings.data?.holdings ?? []) {
+    if (row.fresh && (!row.priceAsOf || expired(row.priceAsOf, 15_000))) { row.fresh = false; changed = true; }
+  }
   if (next.marketStream?.status === "streaming" && (!next.marketStream.lastTickAt || expired(next.marketStream.lastTickAt, 15_000))) {
     next.marketStream.status = "stale"; next.marketStream.reason = "Tick freshness expired"; changed = true;
   }

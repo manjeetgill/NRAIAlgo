@@ -86,6 +86,13 @@ means stored broker credentials and sessions cannot be decrypted.
 
 ## First deployment
 
+Before publishing a release, run `npm ci`, `npm audit --omit=dev --audit-level=moderate`,
+and the CI checks from the committed checkout. The root dependency override pins
+Kite Connect's transitive `mocha > serialize-javascript` to 7.0.5, fixing
+GHSA-5c6j-r48x-rmvq and GHSA-qj8w-gfj5-8c6v without downgrading the broker SDK.
+Keep this override until Kite's dependency tree resolves to a patched serializer;
+do not use `npm audit fix --force` to downgrade Kite automatically.
+
 Run from `deploy/digitalocean` after all files above exist:
 
 ```bash
@@ -159,7 +166,7 @@ network listener. No real broker secrets are included in images.
    restrictions in your broker console. Do not copy an invented callback URL.
 3. Visit `/login` over HTTPS and sign in. Check the session cookie is Secure and
    HttpOnly. `/v1/overview` without authentication must return 401.
-4. `/v1/readiness` must return 200 with the release schema version (currently 8).
+4. `/v1/readiness` must return 200 with the release schema version (currently 12).
    `/dev/overview-playground` must not expose a production preview.
 5. Save credentials through the authenticated broker UI, then explicitly
    authorize each broker. Do not paste credentials into commands/logs.
@@ -192,6 +199,43 @@ network listener. No real broker secrets are included in images.
 - Rebuild regularly for base-image/security updates and validate before release.
   Live broker acceptance, DigitalOcean networking, public TLS issuance and
   recovery drills remain required on the actual infrastructure.
+
+### Calendar maintenance (schema 9)
+
+Startup seeds 30 days of lookback and 90 days ahead, only for years covered by
+the bundled verified holiday data. `/v1/calendar-health` returns 503 when fewer
+than 45 consecutive calendar dates are present, or storage is unavailable.
+Monitor this endpoint separately from process readiness. A daily server warning
+also reports incomplete coverage; it does not deliver an external notification.
+
+Before a new year or announced special session, prepare a JSON file from the
+exchange's verified EQ session notice. Its fields are `source` (HTTPS notice URL),
+`version` (notice/revision identifier), and `days` (an array). Each day contains
+`day` (YYYY-MM-DD), `trading` (boolean), `reason` (string or null), `preOpen`, `open`,
+and `close` (ISO timestamps with offsets, or null). Closed days require a reason
+and null boundaries. Trading boundaries must be ordered and on that IST date;
+use equal preOpen/open if no separate pre-open phase applies.
+
+From the deployment directory, after running migrations:
+
+```sh
+docker compose --env-file .env run --rm --no-deps --entrypoint node \
+  --volume "$PWD/verified-calendar.json:/tmp/calendar.json:ro" \
+  admin apps/api/dist/import-calendar.js /tmp/calendar.json
+```
+
+The import validates the complete file and commits atomically. It replaces only
+listed dates, including weekend/special sessions. Generated seeds cannot overwrite
+imports or legacy/manual rows. Schema 9 preserves existing rows as unmanaged;
+correct any old erroneous dates through an explicit verified import. No unverified
+future dates or special-session times are invented. Coverage measures presence,
+not whether an operator's source has been independently verified.
+
+Password changes through the administrative create-user command now revoke all
+existing sessions for that user. Authentication is asynchronous with bounded
+password work and per-IP/per-account attempt limits. Account limits are in-memory,
+consistent with the supported single-API deployment; multiple replicas require a
+shared limiter and feed ownership design first.
 
 References: [database TLS and trusted sources](https://docs.digitalocean.com/products/databases/postgresql/how-to/secure/),
 [least-privilege database roles](https://docs.digitalocean.com/products/databases/postgresql/how-to/modify-user-privileges/),

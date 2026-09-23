@@ -19,7 +19,7 @@ export class KotakSdkError extends Error {
 export const KotakEventSchema=z.discriminatedUnion('type',[
   z.object({type:z.literal('state'),channel:z.enum(['market','orders']),state:z.enum(['connecting','streaming','reconnecting','unavailable'])}),
   z.object({type:z.literal('order')}),
-  z.object({type:z.literal('tick'),key:z.string().regex(/^[a-z_]+\|[1-9]\d*$/),price:z.number().finite().positive(),sourceAt:z.number().int().positive()}),
+  z.object({type:z.literal('tick'),key:z.string().regex(/^[a-z_]+\|[1-9]\d*$/),price:z.number().finite().positive(),previousClose:z.number().finite().positive().nullable().optional(),sourceAt:z.number().int().positive()}),
 ]);
 
 /** Private child IPC, never a network service. No credentials in argv/env/logs. */
@@ -45,11 +45,11 @@ export function startKotakSdk(op:'login'|'portfolio'|'stream', data:unknown, rec
   return {send(value:unknown){if(!stopped&&!broken)child.stdin.write(JSON.stringify(value)+'\n');},stop(){stopped=true;child.stdin.end();child.kill();}};
 }
 
-export function kotakSdkRequest(op:'login'|'portfolio',data:unknown,launch:typeof startKotakSdk=startKotakSdk):Promise<unknown>{
+export function kotakSdkRequest(op:'login'|'portfolio',data:unknown,launch:typeof startKotakSdk=startKotakSdk,timeoutMs=30_000):Promise<unknown>{
   return new Promise((resolve,reject)=>{
     let bridge:ReturnType<typeof startKotakSdk>|undefined;
     let settled=false;
-    const timer=setTimeout(()=>fail('SDK_TIMEOUT'),30_000);
+    const timer=setTimeout(()=>fail('SDK_TIMEOUT'),timeoutMs);
     function fail(code:KotakSdkErrorCode='SDK_UPSTREAM'){
       if(settled)return;settled=true;clearTimeout(timer);bridge?.stop();reject(new KotakSdkError(code));
     }

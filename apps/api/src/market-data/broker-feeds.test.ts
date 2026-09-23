@@ -38,12 +38,17 @@ describe("Kite terminal worker recovery", () => {
     receive({type:"state",state:"unavailable",retryable:false});
     vi.advanceTimersByTime(600000); expect(launch).toHaveBeenCalledOnce(); feed.stop();
   });
-  it("caps repeated startup failures even while the workspace stays active", () => {
+  it("enters a cooldown then recovers after exhausting startup retries", () => {
     vi.useFakeTimers(); let receive: (m: FeedMessage) => void = () => {};
     const launch = vi.fn((_credentials, callback) => { receive = callback; return {subscribe: vi.fn(), stop: vi.fn()}; });
     const feed = createKiteFeed({apiKey: "k", accessToken: "t", accountId: "A"}, vi.fn(), launch);
-    for (let i = 0; i < 20; i++) { receive({type:"state",state:"unavailable"}); vi.advanceTimersByTime(30000); }
-    expect(launch).toHaveBeenCalledTimes(11); feed.stop();
+    for (let i = 0; i < 10; i++) { receive({type:"state",state:"unavailable"}); vi.advanceTimersByTime(30000); }
+    receive({type:"state",state:"unavailable"});
+    vi.advanceTimersByTime(299999); expect(launch).toHaveBeenCalledTimes(11);
+    vi.advanceTimersByTime(1); expect(launch).toHaveBeenCalledTimes(12);
+    receive({type:"state",state:"streaming"}); vi.advanceTimersByTime(60000);
+    receive({type:"state",state:"unavailable"}); vi.advanceTimersByTime(1000);
+    expect(launch).toHaveBeenCalledTimes(13); feed.stop();
   });
   it("resets the restart budget after a stable connection, including a normal disconnect event", () => {
     vi.useFakeTimers(); let receive: (m: FeedMessage) => void = () => {};

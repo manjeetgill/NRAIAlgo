@@ -40,6 +40,9 @@ function renderScreen() {
   );
 }
 
+vi.mock("../overview/use-overview-snapshot", () => ({useOverviewSnapshot: () => ({snapshot:null,stale:false,refresh:vi.fn()})}));
+vi.mock("../overview/use-icici-account", () => ({useIciciAccount: () => ({account:null,stale:false,refresh:vi.fn()})}));
+
 describe("BrokerConnectionsScreen", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -104,11 +107,11 @@ describe("BrokerConnectionsScreen", () => {
     expect(screen.getByLabelText("API Secret")).toHaveValue("");
   });
 
-  it("switches to Kotak Neo and shows its step 1 direct-login setup fields", () => {
+  it("switches to Kotak and shows its step 1 direct-login setup fields", () => {
     mockFetch();
     renderScreen();
 
-    fireEvent.click(screen.getByRole("tab", { name: "Kotak Neo" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Kotak" }));
 
     expect(screen.getByLabelText("Access Token (Neo API Key)")).toBeInTheDocument();
     expect(screen.getByLabelText("Registered Mobile Number")).toBeInTheDocument();
@@ -118,7 +121,7 @@ describe("BrokerConnectionsScreen", () => {
   it("keeps Kotak's authorize button disabled until step 1 is configured and TOTP/MPIN are both 6 digits", async () => {
     mockFetch({ configured: { zerodha: null, kotak: "2026-09-20T00:00:00Z" } });
     renderScreen();
-    fireEvent.click(screen.getByRole("tab", { name: "Kotak Neo" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Kotak" }));
 
     const authorizeButton = screen.getByRole("button", { name: "Authorize for today" });
     await waitFor(() => expect(authorizeButton).toBeDisabled());
@@ -133,7 +136,7 @@ describe("BrokerConnectionsScreen", () => {
   it("submits Kotak's real TOTP+MPIN login, shows the authorized-until status, and toasts success", async () => {
     const fetchMock = mockFetch({ configured: { zerodha: null, kotak: "2026-09-20T00:00:00Z" } });
     renderScreen();
-    fireEvent.click(screen.getByRole("tab", { name: "Kotak Neo" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Kotak" }));
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Authorize for today" })).toBeDisabled(),
     );
@@ -148,7 +151,7 @@ describe("BrokerConnectionsScreen", () => {
 
     await waitFor(() => expect(screen.getByText(/Authorized until/)).toBeInTheDocument());
     // Appears twice, legitimately: the inline banner and the toast.
-    expect(screen.getAllByText("Kotak Neo authorized for today.").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Kotak authorized for today.").length).toBeGreaterThan(0);
     const postCall = fetchMock.mock.calls.find(([url, init]) =>
       String(url).includes("/broker-auth/kotak/login") && (init as RequestInit | undefined)?.method === "POST",
     );
@@ -160,7 +163,7 @@ describe("BrokerConnectionsScreen", () => {
     mockFetch();
     renderScreen();
 
-    const saveButton = screen.getByRole("button", { name: "Save gateway" });
+    const saveButton = screen.getByRole("button", { name: /Save (Zerodha|Kotak) configuration/ });
     expect(saveButton).toBeDisabled();
 
     fireEvent.change(screen.getByLabelText("API Key"), { target: { value: "my_key" } });
@@ -185,7 +188,7 @@ describe("BrokerConnectionsScreen", () => {
     fetchMock.mockImplementationOnce(
       async () => ({ ok: true, json: async () => ({ zerodha: "2026-09-21T00:00:00Z", kotak: null }) }) as Response,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Save gateway" }));
+    fireEvent.click(screen.getByRole("button", { name: /Save (Zerodha|Kotak) configuration/ }));
 
     await waitFor(() => expect(screen.getByText("Configured")).toBeInTheDocument());
     expect(screen.getByText("Zerodha setup saved.")).toBeInTheDocument();
@@ -205,7 +208,7 @@ describe("BrokerConnectionsScreen", () => {
     fetchMock.mockImplementationOnce(
       async () => ({ ok: false, status: 400, json: async () => ({ message: "Kite rejected that key." }) }) as Response,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Save gateway" }));
+    fireEvent.click(screen.getByRole("button", { name: /Save (Zerodha|Kotak) configuration/ }));
 
     await waitFor(() => expect(screen.getAllByText("Kite rejected that key.").length).toBeGreaterThan(0));
   });

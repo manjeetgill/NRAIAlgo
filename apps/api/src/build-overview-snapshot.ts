@@ -39,6 +39,8 @@ import { fetchKotakPortfolio } from "./broker-auth/kotak-portfolio.js";
 import { fetchZerodhaOrders } from "./broker-auth/zerodha-orders.js";
 import { ZerodhaSessionSchema } from "./broker-auth/zerodha.js";
 import { KotakSessionSchema } from "./broker-auth/kotak.js";
+import { iciciSession } from "./broker-auth/icici.js";
+import { loadSessionPerformance, type SessionPerformance } from "./session-performance.js";
 import { z } from "zod";
 
 const NO_SESSION: [string, string] = ["none", "NO_AUTHORIZED_BROKER_SESSION"];
@@ -170,9 +172,17 @@ export interface KotakInputs {
   appAccessToken?: string;
 }
 export interface OverviewInputs {
+  configuredProviders?: ("zerodha" | "kotak" | "icici")[];
   session: OverviewSnapshot["session"];
   zerodha: ZerodhaInputs | null;
   kotak: KotakInputs | null;
+  /** An unexpired, broker-verified Breeze session. Account portfolio reads
+   * remain separate, but authorization readiness must still recognise it. */
+  icici?: { accountId: string } | null;
+  /** Optional: absent in a hand-built test/mock OverviewInputs that predates
+   * this field. buildOverviewSnapshot treats a missing value as "no history
+   * recorded yet" rather than requiring every caller to supply it. */
+  performance?: SessionPerformance;
 }
 
 /** PostgreSQL-only phase: session/calendar reads plus decrypting whatever
@@ -247,24 +257,47 @@ export async function loadOverviewInputs(
     }
   }
 
-  return { session, zerodha, kotak };
+  const activeIciciSession = await loadDecrypted(
+    query,
+    vault,
+    "broker_sessions",
+    `${scope.workspaceId}:icici:session`,
+    scope.workspaceId,
+    "icici",
+    iciciSession,
+  );
+  const icici = activeIciciSession ? { accountId: activeIciciSession.accountId } : null;
+
+  const configured = await query<{ provider: string }>("SELECT provider FROM broker_app_credentials WHERE workspace_id=$1", [scope.workspaceId]);
+  const configuredProviders = configured.map(row => row.provider).filter((provider): provider is "zerodha" | "kotak" | "icici" => provider === "zerodha" || provider === "kotak" || provider === "icici");
+  const performance = await loadSessionPerformance(query, scope.workspaceId);
+  return { session, zerodha, kotak, icici, configuredProviders, performance };
 }
+
+type BrokerProvider = "zerodha" | "kotak" | "icici";
 
 async function buildPortfolioPanels(
   inputs: OverviewInputs,
   scope: Scope,
   now: Date,
   deps: SnapshotDeps,
-): Promise<{ pnl: OverviewSnapshot["pnl"]; holdings: OverviewSnapshot["holdings"]; positions?: OverviewSnapshot["positions"]; connectedProviders: string[]; brokerReconciliation: OverviewSnapshot["brokerReconciliation"] }> {
+): Promise<{ brokerPnl: NonNullable<OverviewSnapshot["brokerPnl"]>; pnl: OverviewSnapshot["pnl"]; holdings: OverviewSnapshot["holdings"]; positions?: OverviewSnapshot["positions"]; connectedProviders: BrokerProvider[]; brokerReconciliation: OverviewSnapshot["brokerReconciliation"] }> {
   const brokerReconciliation: NonNullable<OverviewSnapshot["brokerReconciliation"]> = {};
   const holdingsParts: HoldingsData[] = [];
   const pnlParts: PnlData[] = [];
-  const connectedProviders: string[] = [];
+  const brokerPnl: NonNullable<OverviewSnapshot["brokerPnl"]> = {};
+  const connectedProviders: BrokerProvider[] = [];
   const attemptedProviders: string[] = [];
   const errors: string[] = [];
   let positions: OverviewSnapshot["positions"];
+  for (const provider of inputs.configuredProviders ?? []) {
+    if (provider !== "icici" && !inputs[provider]) {
+      attemptedProviders.push(provider);
+      errors.push(`${provider}: authorization required`);
+    }
+  }
 
-  if (inputs.zerodha) {
+  await Promise.all([ (async () => { if (inputs.zerodha) {
     brokerReconciliation.zerodha = { accountId: inputs.zerodha.accountId, status: "failed", asOf: null };
     attemptedProviders.push("zerodha");
     try {
@@ -277,34 +310,43 @@ async function buildPortfolioPanels(
       );
       holdingsParts.push(portfolio.holdings);
       pnlParts.push(portfolio.pnl);
+      brokerPnl.zerodha = { status: "available", source: "zerodha", asOf: now.toISOString(), version: 1, reason: null, data: portfolio.pnl };
       connectedProviders.push("zerodha");
-      if (portfolio.positions) brokerReconciliation.zerodha = { accountId: inputs.zerodha.accountId, status: "confirmed", asOf: now.toISOString() };
-      if (portfolio.positions) positions = { status: "available", source: "zerodha-positions", asOf: now.toISOString(), version: 1, reason: null, data: portfolio.positions };
+      if (portfolio.positions) brokerReconciliation.zerodha = { accountId: inputs.zerodha.accountId, status: "confirmed", asOf: portfolio.holdings.accountAsOf ?? new Date().toISOString() };
+      if (portfolio.positions) positions = { status: "available", source: positions ? `${positions.source}+zerodha-positions` : "zerodha-positions", asOf: new Date().toISOString(), version: 1, reason: null, data: [...(positions?.data ?? []), ...portfolio.positions] };
     } catch (caught) {
       errors.push(`Zerodha: ${caught instanceof Error ? caught.message : "portfolio read failed"}`);
     }
   }
 
-  if (inputs.kotak) {
+  })(), (async () => { if (inputs.kotak) {
     brokerReconciliation.kotak = { accountId: inputs.kotak.accountId, status: "failed", asOf: null };
     attemptedProviders.push("kotak");
     try {
       const portfolio = await deps.fetchKotakPortfolio(inputs.kotak.session, scope.context, now, inputs.kotak.accountId, undefined, 8000, inputs.kotak.appAccessToken);
       holdingsParts.push(portfolio.holdings);
       pnlParts.push(portfolio.pnl);
+      brokerPnl.kotak = { status: "available", source: "kotak", asOf: now.toISOString(), version: 1, reason: null, data: portfolio.pnl };
       connectedProviders.push("kotak");
-      if (portfolio.positions) brokerReconciliation.kotak = { accountId: inputs.kotak.accountId, status: "confirmed", asOf: now.toISOString() };
+      if (portfolio.positions) brokerReconciliation.kotak = { accountId: inputs.kotak.accountId, status: "confirmed", asOf: portfolio.holdings.accountAsOf ?? new Date().toISOString() };
       if (portfolio.positions) positions = { status: "available", source: positions ? `${positions.source}+kotak-positions` : "kotak-positions", asOf: now.toISOString(), version: 1, reason: null, data: [...(positions?.data ?? []), ...portfolio.positions] };
     } catch (caught) {
       errors.push(`Kotak: ${caught instanceof Error ? caught.message : "portfolio read failed"}`);
     }
   }
 
-  const nowIso = now.toISOString();
+  })() ]);
+  const nowIso = new Date(Math.max(now.getTime(), Date.now())).toISOString();
   if (!holdingsParts.length) {
-    const [source, defaultReason] = NO_SESSION;
-    const reason = errors.length ? errors.join("; ") : defaultReason;
+    const [defaultSource, defaultReason] = NO_SESSION;
+    const source = inputs.icici ? "icici-breeze-session" : defaultSource;
+    const reason = errors.length
+      ? errors.join("; ")
+      : inputs.icici
+        ? "ICICI session authorized; account portfolio is supplied by the verified Breeze account endpoint."
+        : defaultReason;
     return {
+      brokerPnl,
       pnl: unavailablePanel(source, reason),
       holdings: unavailablePanel(source, reason),
       brokerReconciliation,
@@ -321,6 +363,7 @@ async function buildPortfolioPanels(
   if (positions?.data && isPartial) positions = { ...positions, data: positions.data, asOf: nowIso, status: "degraded", reason: reason! };
 
   return {
+    brokerPnl,
     ...(positions ? { positions } : {}),
     pnl: isPartial
       ? { status: "degraded" as const, source, asOf: nowIso, version: 1, reason: reason!, data: combinePnl(pnlParts) }
@@ -360,14 +403,26 @@ export async function buildOverviewSnapshot(
 
   // During the open session the persistent feed supplies quotes; never wait
   // for an EOD download before delivering a live account snapshot.
-  const prices = inputs.zerodha && inputs.session.data?.state === "market-open"
+  const pricesPromise = inputs.zerodha && inputs.session.data?.state === "market-open"
     ? unavailablePanel("zerodha-websocket", "WAITING_FOR_LIVE_TICKS")
-    : await buildPricesPanel(inputs.session, nowIso, deps);
-  const [{ pnl, holdings, positions, connectedProviders, brokerReconciliation }, brokerOrders] = await Promise.all([
+    : buildPricesPanel(inputs.session, nowIso, deps);
+  const [{ pnl, brokerPnl, holdings, positions, connectedProviders, brokerReconciliation }, brokerOrders, prices] = await Promise.all([
     buildPortfolioPanels(inputs, scope, now, deps),
     inputs.zerodha && deps.fetchZerodhaOrders ? deps.fetchZerodhaOrders(inputs.zerodha) : undefined,
+    pricesPromise,
   ]);
-  const hasBrokerSession = connectedProviders.length > 0;
+  const expectedProviders = inputs.configuredProviders ?? connectedProviders;
+  const authorizedProviders = [
+    ...(inputs.zerodha ? ["zerodha" as const] : []),
+    ...(inputs.kotak ? ["kotak" as const] : []),
+    ...(inputs.icici ? ["icici" as const] : []),
+  ];
+  const missingAuthorizedProvider = expectedProviders.some(provider => !authorizedProviders.includes(provider));
+  const hasBrokerSession = expectedProviders.length > 0 && !missingAuthorizedProvider;
+  // Multi-session performance stats attach to whatever pnl data exists --
+  // they describe workspace history, independent of whether *today's*
+  // broker read happened to succeed, degrade or fail.
+  const pnlWithPerformance = pnl.data ? { ...pnl, data: { ...pnl.data, performance: inputs.performance } } : pnl;
 
   return {
     schemaVersion: 1,
@@ -375,11 +430,14 @@ export async function buildOverviewSnapshot(
     serverTime: nowIso,
     generatedAt: nowIso,
     scope,
+    authorizedProviders,
+    ...(inputs.configuredProviders ? { configuredProviders: inputs.configuredProviders } : {}),
     calendarVersion: "v1",
     sourceWatermarks: { accountVersion: 0, eventCursor: "none" },
     session: inputs.session,
     prices,
-    pnl,
+    pnl: pnlWithPerformance,
+    brokerPnl,
     holdings,
     brokerReconciliation,
     ...(positions ? { positions } : {}),
@@ -395,9 +453,11 @@ export async function buildOverviewSnapshot(
       reason: null,
       data: {
         checks: {
-          totp: { status: "unknown", reason: "No authenticated user session yet" },
+          totp: { status: "unknown", reason: "Platform MFA verification is not supplied by the readiness service; app sign-in alone does not verify MFA." },
           priceFeed: { status: "unknown", reason: "Only EOD reference prices available; no live feed" },
-          brokerSessions: hasBrokerSession
+          brokerSessions: missingAuthorizedProvider
+            ? { status: "failed", reason: "A configured broker requires authorization or a successful account read." }
+            : hasBrokerSession
             ? { status: "passed", reason: null }
             : { status: "unknown", reason: NO_SESSION[1] },
           riskLimits: { status: "unknown", reason: "NO_RISK_LIMIT_CONFIGURED" },

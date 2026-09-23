@@ -111,7 +111,25 @@ export class LiveOverview {
       : { status: quotes.length === 3 && quotes.every(q => q.fresh) ? "passed" : "unknown", reason: quotes.length === 3 && quotes.every(q => q.fresh) ? null : "Waiting for fresh index ticks" };
     if (snapshot.readiness.data) snapshot.readiness.data.liveTradeEligible = false;
     const positions = snapshot.positions?.data;
-    entry.feed.subscribe((positions ?? []).filter(row => row.provider === "zerodha" && row.accountId === entry.credentials.accountId).map(row => row.instrumentToken));
+    const holdings = snapshot.holdings.data?.holdings.filter(row => row.provider === "zerodha" && row.accountId === entry.credentials.accountId) ?? [];
+    entry.feed.subscribe([...new Set([...(positions ?? []).filter(row => row.provider === "zerodha" && row.accountId === entry.credentials.accountId).map(row => row.instrumentToken), ...holdings.flatMap(row => row.instrumentToken ? [row.instrumentToken] : [])])]);
+    for (const row of holdings) {
+      row.fresh = false;
+      const tick = row.instrumentToken ? entry.ticks.get(row.instrumentToken) : undefined;
+      const baseline = row.priceAsOf ?? snapshot.holdings.data?.accountAsOf ?? snapshot.holdings.asOf;
+      if (accountStale || entry.reconcile || !tick || !fresh(tick) || !baseline || tick.sourceAt < Date.parse(baseline)) continue;
+      const price = Math.round(tick.price * 100);
+      const value = Math.round(price * row.quantity);
+      if (!Number.isSafeInteger(price) || !Number.isSafeInteger(value)) continue;
+      const previousPrice = row.ltpPaise;
+      row.ltpPaise = price;
+      row.marketValuePaise = value;
+      if (row.investedPaise != null) row.unrealizedPaise = value - row.investedPaise;
+      if (row.dayPnlPaise != null && previousPrice != null) row.dayPnlPaise += Math.round((price - previousPrice) * row.quantity);
+      row.priceAsOf = new Date(tick.sourceAt).toISOString();
+      row.fresh = true;
+      if (snapshot.holdings.data) snapshot.holdings.data.valuationAsOf = row.priceAsOf;
+    }
     let delta = 0;
     let anyRevalued = false;
     for (const row of positions ?? []) {
@@ -123,6 +141,9 @@ export class LiveOverview {
       const change = Math.round((tick.price - row.lastPrice) * row.quantity * row.multiplier * 100);
       row.pnlPaise += change;
       row.lastPrice = tick.price;
+      row.mtmPaise = row.previousClose != null
+        ? Math.round((tick.price - row.previousClose) * row.quantity * row.multiplier * 100)
+        : null;
       row.asOf = new Date(tick.receivedAt).toISOString();
       row.fresh = true;
       delta += change;
@@ -135,8 +156,16 @@ export class LiveOverview {
       snapshot.pnl.data.valuationAsOf = nowIso;
       snapshot.pnl.source += "+tick-estimate";
     }
+    const attributed = snapshot.brokerPnl?.zerodha;
+    if (attributed?.data && anyRevalued) {
+      attributed.data.grossPaise += delta;
+      attributed.data.unrealisedPaise += delta;
+      if (attributed.data.netPaise != null) attributed.data.netPaise += delta;
+      attributed.data.valuationAsOf = nowIso;
+      attributed.source = "zerodha+tick-estimate";
+    }
     // Connection status is not a measured latency. No made-up ping values.
-    snapshot.connections = { status: "available", source: "broker-reads+zerodha-feed-worker", asOf: nowIso, version: now, reason: null, data: [...(snapshot.connections.data ?? []).filter(connection => !connection.source.toLowerCase().includes("zerodha")), { source: `Zerodha WebSocket (${entry.state})`, status: entry.state === "streaming" ? "connected" : "session_ended", latencyMs: null, asOf: entry.lastTickAt == null ? nowIso : new Date(entry.lastTickAt).toISOString() }] };
+    snapshot.connections = { status: "available", source: "broker-reads+zerodha-feed-worker", asOf: nowIso, version: now, reason: null, data: [...(snapshot.connections.data ?? []).filter(connection => !connection.source.toLowerCase().includes("zerodha websocket")), { source: `Zerodha WebSocket (${entry.state})`, status: entry.state === "streaming" ? "connected" : "session_ended", latencyMs: null, asOf: entry.lastTickAt == null ? nowIso : new Date(entry.lastTickAt).toISOString() }] };
     return snapshot;
   }
 }

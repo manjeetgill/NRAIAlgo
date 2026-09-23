@@ -23,6 +23,8 @@ export const OverviewSnapshotSchema = z.object({
   serverTime: z.iso.datetime(),
   generatedAt: z.iso.datetime(),
   scope: ScopeSchema,
+  authorizedProviders: z.array(z.enum(["zerodha", "kotak", "icici"])).optional(),
+  configuredProviders: z.array(z.enum(["zerodha", "kotak", "icici"])).optional(),
   calendarVersion: z.string().min(1),
   sourceWatermarks: z.object({
     accountVersion: z.number().int().nonnegative(),
@@ -31,6 +33,7 @@ export const OverviewSnapshotSchema = z.object({
   session: SessionPanelSchema,
   prices: PricesPanelSchema,
   pnl: PnlPanelSchema,
+  brokerPnl: z.object({ zerodha: PnlPanelSchema.optional(), kotak: PnlPanelSchema.optional() }).optional(),
   holdings: HoldingsPanelSchema,
   deployment: DeploymentPanelSchema,
   readiness: ReadinessPanelSchema,

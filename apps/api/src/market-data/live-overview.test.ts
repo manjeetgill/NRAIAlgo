@@ -33,6 +33,21 @@ function setup() {
 }
 
 describe("workspace-isolated live overview", () => {
+  it("subscribes holdings and revalues ticks without changing quantities or double counting", () => {
+    const s = setup();
+    const row = { provider:"zerodha", accountId:"AB1234", symbol:"EQUITY", instrumentToken:200, quantity:10, pledgedQuantity:2, marketValuePaise:100000, ltpPaise:10000, investedPaise:90000, unrealizedPaise:10000, dayPnlPaise:1000, priceAsOf:s.snapshot.generatedAt };
+    s.snapshot.holdings.data!.holdings = [row];
+    s.connect(); s.advance(1000); s.tick(200,105);
+    const first = s.service.overlay(s.snapshot);
+    expect(s.feeds[0]!.subscribe).toHaveBeenCalledWith([100,200]);
+    expect(first.holdings.data!.holdings[0]).toMatchObject({quantity:10,pledgedQuantity:2,ltpPaise:10500,marketValuePaise:105000,investedPaise:90000,unrealizedPaise:15000,dayPnlPaise:6000,fresh:true});
+    expect(s.service.overlay(s.snapshot).holdings).toEqual(first.holdings);
+    expect(s.snapshot.holdings.data!.holdings[0]).toEqual(row);
+    expect(first.pnl).toEqual(s.snapshot.pnl);
+    s.advance(16000);
+    expect(s.service.overlay(s.snapshot).holdings.data!.holdings[0]).toMatchObject({ltpPaise:10000,fresh:false});
+  });
+
   it("preserves Kotak connection and position data without treating its token as a Kite token", () => {
     const s = setup();
     s.snapshot.positions!.data!.push({...s.snapshot.positions!.data![0]!,provider:'kotak',accountId:'K1',instrumentToken:999,pnlPaise:12000});

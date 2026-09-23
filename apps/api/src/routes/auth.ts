@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { createHash, timingSafeEqual } from "node:crypto";
 import type { Store } from "../database.js";
+import { redeemAccessCode } from "../account-access.js";
 import {
   createSession,
   destroySession,
@@ -18,7 +19,7 @@ declare module "fastify" {
   }
 }
 
-const loginBody = z.object({ email: z.string().trim().toLowerCase().min(1), password: z.string().min(1) }).strict();
+const loginBody = z.object({ email: z.string().trim().toLowerCase().min(1).max(320), password: z.string().min(1).max(1024) }).strict();
 const setupBody = z.object({
   email: z.string().trim().toLowerCase().email().max(254),
   password: z.string().min(12).max(256),
@@ -44,6 +45,19 @@ function cookieOptions() {
  * the one endpoint an attacker could use to guess a password. */
 export function authRoutes(store: Store) {
   return async function routes(app: FastifyInstance): Promise<void> {
+    const attempts = new Map<string, { count: number; until: number }>();
+    // Per-account bound supplements the existing IP limiter, including unknown users.
+    function accountAllowed(email: string) {
+      const now = Date.now();
+      for (const [key, value] of attempts) if (value.until <= now) attempts.delete(key);
+      const key = createHash("sha256").update(email).digest("hex");
+      const value = attempts.get(key);
+      if (!value) {
+        if (attempts.size >= 10_000) return false;
+        attempts.set(key, {count: 1, until: now + 60_000}); return true;
+      }
+      return ++value.count <= 10;
+    }
     app.get("/v1/auth/setup", async (_request, reply) => {
       reply.header("Cache-Control", "no-store");
       const users = await store.transaction(query => query("SELECT id FROM users LIMIT 1"));
@@ -58,7 +72,7 @@ export function authRoutes(store: Store) {
       if (!body.success) return reply.badRequest("Provide a valid email, a 12–256 character password and the setup key.");
       const digest = (value: string) => createHash("sha256").update(value).digest();
       if (!timingSafeEqual(digest(key), digest(body.data.setupToken))) return reply.forbidden("Invalid setup key.");
-      const passwordHash = hashPassword(body.data.password);
+      const passwordHash = await hashPassword(body.data.password);
       const created = await store.transaction(async query => {
         // Serializes first-user creation across API processes AND CLI inserts.
         // READ COMMITTED sees a competing committed insert after acquiring this lock.
@@ -80,6 +94,7 @@ export function authRoutes(store: Store) {
         if (!body.success) {
           return reply.badRequest("Email and password are required.");
         }
+        if (!accountAllowed(body.data.email)) return reply.code(429).header("Retry-After", "60").send({ message: "Too many login attempts; retry later." });
         const rows = await store.transaction((query) =>
           query<{ id: string; password_hash: string }>(
             "SELECT id, password_hash FROM users WHERE email=$1",
@@ -89,14 +104,28 @@ export function authRoutes(store: Store) {
         const user = rows[0];
         // Same generic message either way -- never reveal whether the email
         // itself is registered.
-        if (!user || !verifyPassword(body.data.password, user.password_hash)) {
+        const valid = await verifyPassword(body.data.password, user?.password_hash ?? `scrypt:${"0".repeat(32)}:${"0".repeat(128)}`);
+        if (!user || !valid) {
           return reply.unauthorized("Invalid email or password.");
         }
-        const { token, expiresAt } = await createSession(store, user.id);
+        const { token, expiresAt } = await createSession(store, user.id, user.password_hash);
         reply.setCookie(SESSION_COOKIE_NAME, token, { ...cookieOptions(), expires: expiresAt });
         return { email: body.data.email };
       },
     );
+
+    for (const purpose of ["invite", "reset"] as const) {
+      app.post(`/v1/auth/${purpose === "invite" ? "register" : "reset-password"}`, { config: { rateLimit: { max: 5, timeWindow: "1 minute" } } }, async (request, reply) => {
+        reply.header("Cache-Control", "no-store");
+        const body = z.object({ email: z.string().trim().toLowerCase().email().max(254), password: z.string().min(12).max(256), code: z.string().regex(/^[A-Za-z0-9_-]{43}$/) }).strict().safeParse(request.body);
+        if (!body.success) return reply.badRequest("Provide an email, a 12–256 character password and a valid access code.");
+        if (!accountAllowed(body.data.email)) return reply.code(429).header("Retry-After", "60").send({ message: "Too many attempts; retry later." });
+        const redeemed = await redeemAccessCode(store, body.data.email, purpose, body.data.code, body.data.password);
+        if (!redeemed) return reply.badRequest("Invalid or expired code. Ask the owner for a new code for this email and action.");
+        reply.clearCookie(SESSION_COOKIE_NAME, { path: "/" });
+        return reply.code(purpose === "invite" ? 201 : 200).send({ completed: true });
+      });
+    }
 
     app.post("/v1/auth/logout", async (request, reply) => {
       const token = request.cookies[SESSION_COOKIE_NAME];
@@ -120,6 +149,7 @@ export function authRoutes(store: Store) {
  * never from a client-supplied query parameter. */
 export function requireAuth(store: Store) {
   return async function (request: FastifyRequest, reply: FastifyReply): Promise<void> {
+    reply.header("Cache-Control", "no-store");
     const token = request.cookies[SESSION_COOKIE_NAME];
     const identity = token ? await resolveSession(store, token) : null;
     if (!identity) {

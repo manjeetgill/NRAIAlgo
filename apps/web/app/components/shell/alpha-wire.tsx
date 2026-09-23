@@ -4,23 +4,39 @@ import { useEffect, useRef, useState } from "react";
 import { alphaWireSnapshotSchema, safeNewsUrl, type AlphaWireItem, type AlphaWireSnapshot } from "@nraialgo/contracts";
 import styles from "./alpha-wire.module.css";
 
+const COLLAPSE_PREFERENCE_KEY = "nraialgo.alpha-wire.collapsed";
+
 function stamp(value: string | null) {
   if (!value || !Number.isFinite(Date.parse(value))) return "Time not supplied";
   return new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(new Date(value)) + " IST";
 }
 
-export function AlphaWire({ enabled }: { enabled: boolean }) {
+export function AlphaWire({ enabled, initiallyCollapsed = false }: { enabled: boolean; initiallyCollapsed?: boolean }) {
   const [snapshot, setSnapshot] = useState<AlphaWireSnapshot | null>(null);
   const [connected, setConnected] = useState(false);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("All");
   const [provider, setProvider] = useState("All");
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(initiallyCollapsed);
   const [selected, setSelected] = useState<AlphaWireItem | null>(null);
   const [unread, setUnread] = useState(0);
   const [now, setNow] = useState(0);
   const dialog = useRef<HTMLDialogElement>(null);
   const cards = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    try {
+      const saved = window.localStorage.getItem(COLLAPSE_PREFERENCE_KEY);
+      if (saved !== null) queueMicrotask(() => { if (!cancelled) setCollapsed(saved === "true"); });
+    } catch { /* Storage can be disabled; the safe default still applies. */ }
+    return () => { cancelled = true; };
+  }, []);
+
+  const setCollapsePreference = (value: boolean) => {
+    setCollapsed(value);
+    try { window.localStorage.setItem(COLLAPSE_PREFERENCE_KEY, String(value)); } catch { /* Non-essential preference. */ }
+  };
 
   useEffect(() => {
     if (!enabled) return;
@@ -72,8 +88,8 @@ export function AlphaWire({ enabled }: { enabled: boolean }) {
     <div className={styles.toolbar}>
       <strong className={styles.brand}><span aria-hidden="true">◉</span> ALPHA WIRE</strong>
       <span className={connected && healthy === sources.length && healthy > 0 ? styles.healthy : styles.status} role="status">{status}</span>
-      <button type="button" onClick={() => { setUnread(0); setCollapsed(false); }}>{unread ? `${unread} new · Mark read` : `${snapshot?.items.length ?? 0} headlines`}</button>
-      <button type="button" className={styles.collapse} aria-expanded={!collapsed} aria-controls="alpha-wire-content" onClick={() => setCollapsed(value => !value)}>{collapsed ? "Expand" : "Collapse"}</button>
+      <button type="button" onClick={() => { setUnread(0); setCollapsePreference(false); }}>{unread ? `${unread} new · Mark read` : `${snapshot?.items.length ?? 0} headlines`}</button>
+      <button type="button" className={styles.collapse} aria-expanded={!collapsed} aria-controls="alpha-wire-content" onClick={() => setCollapsePreference(!collapsed)}>{collapsed ? "Expand" : "Collapse"}</button>
     </div>
     {!collapsed && <div id="alpha-wire-content">
       <div className={styles.filters}>

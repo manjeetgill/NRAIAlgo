@@ -16,6 +16,13 @@
     "lint": "npm run lint --workspaces",
     "typecheck": "npm run prepare-contracts && npm run typecheck --workspaces"
   },
+  "overrides": {
+    "kiteconnect": {
+      "mocha": {
+        "serialize-javascript": "7.0.5"
+      }
+    }
+  },
   "devDependencies": {
     "concurrently": "10.0.5",
     "typescript": "5.9.3"

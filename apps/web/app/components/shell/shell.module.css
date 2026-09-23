@@ -252,12 +252,21 @@
 
 .accountSub {
   font-size: 0.65rem;
-  color: var(--color-text-muted);
-  background: none;
-  border: none;
-  padding: 0;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  margin-top: 3px;
+  padding: 3px 8px;
   font-family: inherit;
   cursor: pointer;
+}
+
+.accountSub:hover,
+.accountSub:focus-visible {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
 }
 
 .avatar {
@@ -580,9 +589,9 @@
   display: none;
 }
 
-.liveStrip { background: var(--color-live-crimson-deep); color: #fff; }
+.liveStrip { background: var(--color-surface-raised, #172438); color: var(--color-text-primary); }
 .extraHeaderBar { min-width: 0; }
-@media (min-width: 768px) {
+@media (min-width: 1025px) {
   .shell { display: grid; grid-template-columns: 240px minmax(0, 1fr); grid-template-rows: auto auto auto 1fr; align-items: start; }
   .body { display: contents; }
   .sidebar { grid-column: 1; grid-row: 1 / 5; position: sticky; top: 0; height: 100dvh; overflow-y: auto; }
@@ -592,9 +601,26 @@
   .main { grid-column: 2; grid-row: 4; width: 100%; }
 }
 
-@media (max-width: 767px) {
+@media (max-width: 1024px) {
+  .metricsBar {
+    position: sticky;
+    top: 0;
+    z-index: 25;
+  }
+
   .drawerToggle {
     display: flex;
+  }
+
+  .accountArea {
+    margin-left: auto;
+  }
+
+  .accountBadge {
+    max-width: min(48vw, 240px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .secondaryClocks,
@@ -627,3 +653,14 @@
     z-index: 30;
   }
 }
+
+.accountMenu { position: relative; min-width: 0; max-width: 220px; }
+.accountMenu summary { white-space: nowrap; text-overflow: ellipsis; overflow: hidden; cursor: pointer; }
+.accountMenu > div { position: absolute; right: 0; top: 30px; width: 240px; display: grid; gap: 16px; padding: 16px; background: var(--color-surface-container-lowest); border: 1px solid var(--color-border-subtle); z-index: 60; }
+.accountBadgeStack > .accountBadge { display: none; }
+.stripRight { min-width: 0; max-width: 100%; }
+@media (max-width: 768px) { .stripRight { width: 100%; } .modeButton { display: none; } .executionStrip { padding: 6px 12px; } }
+.haltButton:disabled { background: var(--color-surface-container-lowest); color: var(--color-text-muted); border-color: var(--color-border-subtle); }
+.executionStrip { position: relative; flex-wrap: wrap; }
+.metricsBar { flex-wrap: wrap; gap: 8px; }
+@media (max-width: 1024px) { .metricsBar { position: relative; } .accountMenu { max-width: 150px; } .stripRight { flex-wrap: wrap; } }
