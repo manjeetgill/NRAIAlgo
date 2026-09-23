@@ -37,10 +37,12 @@ export function parseIndexCloseCsv(csv: string, day: string): PriceQuote[] {
   const header = lines[0]?.split(",").map((cell) => cell.trim()) ?? [];
   const nameIndex = header.indexOf("Index Name");
   const closeIndex = header.indexOf("Closing Index Value");
+  const changeIndex = header.indexOf("Points Change");
+  const changePctIndex = header.indexOf("Change(%)");
   if (nameIndex === -1 || closeIndex === -1) {
     throw new Error("Unexpected NSE index-close CSV format");
   }
-  const closingValues = new Map<string, number>();
+  const closingValues = new Map<string, { value: number; change?: number; changePct?: number }>();
   for (const line of lines.slice(1)) {
     const cells = line.split(",");
     const name = cells[nameIndex]?.trim();
@@ -51,7 +53,13 @@ export function parseIndexCloseCsv(csv: string, day: string): PriceQuote[] {
     const dateIndex = header.indexOf("Index Date");
     if (dateIndex >= 0 && cells[dateIndex]?.trim() !== day.split("-").reverse().join("-")) throw new Error("NSE closing date mismatch");
     if (name && Number.isFinite(close)) {
-      closingValues.set(name, close);
+      const change = changeIndex >= 0 ? Number(cells[changeIndex]?.trim()) : Number.NaN;
+      const changePct = changePctIndex >= 0 ? Number(cells[changePctIndex]?.trim()) : Number.NaN;
+      closingValues.set(name, {
+        value: close,
+        ...(Number.isFinite(change) ? { change } : {}),
+        ...(Number.isFinite(changePct) ? { changePct } : {}),
+      });
     }
   }
   const receivedAt = new Date().toISOString();
@@ -72,11 +80,13 @@ export function parseIndexCloseCsv(csv: string, day: string): PriceQuote[] {
   return INDEX_INSTRUMENTS.map(({ indexName, instrumentId, label }) => ({
     instrumentId,
     label,
-    value: closingValues.get(indexName)!,
+    value: closingValues.get(indexName)!.value,
     priceBasis: "official-close" as const,
     sourceAsOf,
     receivedAt,
     fresh: false,
+    ...(closingValues.get(indexName)!.change == null ? {} : { change: closingValues.get(indexName)!.change }),
+    ...(closingValues.get(indexName)!.changePct == null ? {} : { changePct: closingValues.get(indexName)!.changePct }),
   }));
 }
 

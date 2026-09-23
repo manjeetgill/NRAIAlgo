@@ -180,13 +180,21 @@ describe("pre-open dashboard", () => {
 });
 
 describe("closed market layouts", () => {
-  it("renders the after-close panel hierarchy and all three reference-price slots", () => {
+  it("renders the shared header and three distinct post-market tab states", () => {
     render(<OverviewScreen snapshot={OVERVIEW_SNAPSHOT_FIXTURES["after-close"]} />);
-    for (const name of ["Session P&L Summary", "Demat Holdings", "Strategy Posture", "Since the Close", "Data & Broker Connections", "Next Session Pre-Flight", "NIFTY 50", "BANK NIFTY", "INDIA VIX"]) {
+    for (const name of ["Session P&L Summary", "Demat Holdings", "Strategy Posture", "Next Session Pre-Flight", "Monte Carlo Overnight Gap & Volatility Stress HUD", "Carried-Forward Overnight Contract Matrix", "Intraday P&L Path"]) {
       expect(screen.getByRole("heading", { name })).toBeInTheDocument();
     }
-    expect(screen.getByText("Last observed")).toBeInTheDocument();
-    expect(screen.queryByText("Official close")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Realized P&L Ledger Audit" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: /Act 1: Settle & Reconcile/ }));
+    expect(screen.getByRole("heading", { name: "Realized P&L Ledger Audit" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "NRI Broker Settlements" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "FEMA & RBI PIS Compliance" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Monte Carlo Overnight Gap & Volatility Stress HUD" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: /Act 3: Tomorrow's Edge/ }));
+    expect(screen.getByRole("heading", { name: "Participant Flow Matrix (EOD)" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "EOD Sector Index Performance" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Alpha Wire announcements" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Arm at next open" })).toBeDisabled();
   });
 
@@ -195,7 +203,7 @@ describe("closed market layouts", () => {
     expect(screen.getByText("2026-09-22")).toBeInTheDocument();
     expect(screen.getByText("Weekly equity history unavailable")).toBeInTheDocument();
     expect(screen.getByText(/Reported period: Unavailable/)).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Weekend Optimizations" })).toBeInTheDocument();
+    expect(screen.getAllByRole("tab")).toHaveLength(3);
   });
 
   it("does not call a provisional balance reconciled or unknown exposure flat", () => {
@@ -207,6 +215,41 @@ describe("closed market layouts", () => {
     expect(screen.getByText("Provisional / pending")).toBeInTheDocument();
     expect(screen.getByText(/Overnight exposure unverified/)).toBeInTheDocument();
     expect(screen.queryByText("Reconciled", { exact: true })).not.toBeInTheDocument();
+  });
+
+  it("fills closed-market day MTM and open-position P&L from complete broker position data", () => {
+    const snapshot = structuredClone(OVERVIEW_SNAPSHOT_FIXTURES["after-close"]);
+    snapshot.configuredProviders = ["zerodha"];
+    snapshot.brokerReconciliation = { zerodha: { accountId: "acct-demo", status: "confirmed", asOf: snapshot.generatedAt } };
+    snapshot.positions = { status: "available", source: "zerodha-positions", asOf: snapshot.generatedAt, version: 1, reason: null, data: [{
+      provider: "zerodha", accountId: "acct-demo", instrumentToken: 1, exchange: "NFO", symbol: "NIFTY-FUT", product: "NRML",
+      quantity: -25, multiplier: 1, averagePrice: 101, lastPrice: 98, previousClose: 100, pnlPaise: 8_000, mtmPaise: 5_000,
+      asOf: snapshot.generatedAt, fresh: false,
+    }] };
+    render(<OverviewScreen snapshot={snapshot} />);
+    const stress = within(screen.getByRole("region", { name: "Monte Carlo Overnight Gap & Volatility Stress HUD" }));
+    expect(stress.getByText("₹50.00")).toBeInTheDocument();
+    expect(stress.getByText("₹80.00")).toBeInTheDocument();
+    expect(stress.getByText("Day MTM · open positions")).toBeInTheDocument();
+  });
+
+  it("shows official NSE cash activity, participant OI and sector performance", () => {
+    const snapshot = structuredClone(OVERVIEW_SNAPSHOT_FIXTURES["after-close"]);
+    snapshot.eodIntelligence = { status: "available", source: "nse-eod-reports", asOf: snapshot.generatedAt, version: 1, reason: null, data: {
+      reportDate: "2026-09-22",
+      cashActivity: [{ category: "FII/FPI", buyCrore: 9845.81, sellCrore: 13655.8, netCrore: -3809.99 }, { category: "DII", buyCrore: 14599.72, sellCrore: 10479.65, netCrore: 4120.07 }],
+      participantOi: [{ category: "FII", futureIndexLong: 40257, futureIndexShort: 343165, optionIndexCallLong: 1, optionIndexPutLong: 1, optionIndexCallShort: 1, optionIndexPutShort: 1 }, { category: "DII", futureIndexLong: 40955, futureIndexShort: 27774, optionIndexCallLong: 1, optionIndexPutLong: 1, optionIndexCallShort: 1, optionIndexPutShort: 1 }],
+      sectorPerformance: [{ instrumentId: "NSE:BANKNIFTY", label: "Banking & Finance", close: 56215.55, change: -255.1, changePct: -0.45 }],
+    } };
+    render(<OverviewScreen snapshot={snapshot} />);
+    fireEvent.click(screen.getByRole("tab", { name: /Act 3: Tomorrow's Edge/ }));
+    const flows = within(screen.getByRole("region", { name: "Participant Flow Matrix (EOD)" }));
+    expect(flows.getByText("−₹3,809.99 Cr")).toBeInTheDocument();
+    expect(flows.getByText("+₹4,120.07 Cr")).toBeInTheDocument();
+    expect(flows.getByText("-3,02,908 contracts")).toBeInTheDocument();
+    const sectors = within(screen.getByRole("region", { name: "EOD Sector Index Performance" }));
+    expect(sectors.getByText("Close 56,215.55")).toBeInTheDocument();
+    expect(sectors.getByText("-255.10 (-0.45%)")).toBeInTheDocument();
   });
 
   it("fails expired broker readiness and labels the closed live feed not applicable", () => {
@@ -237,7 +280,7 @@ describe("real-data layout switching", () => {
     const { rerender } = render(<OverviewScreen snapshot={snapshot} />);
     for (const layout of ["pre-open", "after-close", "weekend-holiday", "market-open"] as const) {
       rerender(<OverviewScreen snapshot={snapshot} layout={layout} />);
-      expect(screen.getByText("12,345.67")).toBeInTheDocument();
+      expect(screen.getAllByText("12,345.67").length).toBeGreaterThan(0);
       expect(screen.queryByText("Not applicable")).not.toBeInTheDocument();
     }
     expect(JSON.stringify(snapshot)).toBe(original);

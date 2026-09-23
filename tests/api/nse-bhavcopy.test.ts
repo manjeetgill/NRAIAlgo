@@ -37,6 +37,11 @@ describe("parseIndexCloseCsv", () => {
     }
   });
 
+  it("carries official point and percentage changes when NSE supplies them", () => {
+    const quotes = parseIndexCloseCsv(REAL_SAMPLE, "2026-09-18");
+    expect(quotes[0]).toMatchObject({ change: 75.8, changePct: 0.33 });
+  });
+
   it("sets sourceAsOf to the real 15:30 IST market close for that trading day", () => {
     const [quote] = parseIndexCloseCsv(REAL_SAMPLE, "2026-09-18");
 

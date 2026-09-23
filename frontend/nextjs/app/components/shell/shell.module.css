@@ -18,6 +18,52 @@
   top: 8px;
 }
 
+/* Closed-session command header. Values come from the overview snapshot;
+   pending states remain explicit instead of copying the reference mock's
+   successful reconciliation labels. */
+.closedShellHeader {
+  min-height: 70px;
+  display: grid;
+  grid-template-columns: auto auto minmax(170px, auto) minmax(220px, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+  border-bottom: 1px solid #1f2b3c;
+  background: #090e15;
+  color: #dce5f2;
+}
+.closedBrand { display:flex; align-items:center; gap:7px; color:#e8edf5; white-space:nowrap; }
+.closedBrand > span { color:#42d6a4; font-size:20px; }
+.closedBrand strong { font-size:15px; }
+.closedTerminalTitle { padding-left:12px; border-left:1px solid #253247; color:#f1f5f9; font-size:16px; font-weight:750; line-height:1.05; }
+.closedSessionBadge { display:flex; flex-direction:column; gap:2px; padding:6px 9px; border:1px solid #28354a; border-radius:5px; background:#172033; color:#f5a313; font:9px/1.25 var(--font-jetbrains-mono),monospace; text-transform:uppercase; }
+.closedSessionBadge strong { font-size:11px; }
+.closedClocks { min-width:0; color:#7f8ba0; font:9px var(--font-jetbrains-mono),monospace; white-space:nowrap; }
+.closedClocks span { margin:0 6px; color:#354156; }
+.closedHeaderActions { display:flex; align-items:stretch; gap:5px; }
+.closedHeaderActions > button,.closedHeaderActions > a,.closedHeaderActions > span { display:flex; align-items:center; justify-content:center; gap:5px; min-height:38px; padding:5px 8px; border:1px solid #253247; border-radius:4px; background:#172033; color:#dce5f2; font-size:9px; line-height:1.2; text-decoration:none; text-align:center; }
+.closedHeaderActions .material-symbols-outlined { font-size:16px; }
+.closedHeaderActions > button:disabled { opacity:.72; cursor:not-allowed; }
+.closedHeaderActions .reconciledBadge { color:#42d6a4; }
+.closedHeaderActions .pendingBadge { color:#f5a313; }
+.closedHeaderActions .reauthAction { color:#f5a313; }
+.closedAccountMenu { max-width:none; }
+.closedAccountMenu summary { display:flex; width:36px; height:36px; align-items:center; justify-content:center; border-radius:50%; background:#42d6a4; color:#06251b; }
+.closedAccountMenu summary::marker { content:""; }
+
+@media (max-width: 1180px) {
+  .closedShellHeader { grid-template-columns:auto auto minmax(160px,1fr) auto auto; }
+  .closedBrand { display:none; }
+  .closedClocks { display:none; }
+}
+@media (max-width: 760px) {
+  .closedShellHeader { grid-template-columns:auto 1fr auto; gap:7px; }
+  .closedTerminalTitle { border:0; padding:0; }
+  .closedSessionBadge { min-width:0; }
+  .closedHeaderActions { grid-column:1/-1; overflow-x:auto; }
+  .closedHeaderActions > button,.closedHeaderActions > a,.closedHeaderActions > span { flex:1 0 auto; }
+}
+
 /* ---- Execution mode strip ---- */
 
 .executionStrip {

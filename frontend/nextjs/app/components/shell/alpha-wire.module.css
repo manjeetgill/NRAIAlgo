@@ -27,6 +27,13 @@
 .filters select { max-width: 150px; padding: 6px; border: 1px solid var(--color-border-subtle); border-radius: 6px; background: var(--color-surface-elevated); color: var(--color-text-primary); font-size: 12px; }
 .sourceStatus { font-size: 11px; line-height: 1.7; color: var(--color-text-muted); max-height: 160px; overflow: auto; }
 .sourceStatus summary { cursor: pointer; }
+.embedded { padding: 0; background: transparent; }
+.embedded .toolbar { align-items: flex-start; }
+.embedded .brand { font-size: 13px; }
+.embedded .cards { display:grid; grid-template-columns:repeat(4,minmax(220px,1fr)); overflow-x:auto; }
+.embedded .card { width:auto; min-width:220px; }
 @media (max-width: 767px) { .wire { top: 0; padding: 8px 12px; } .status, .healthy { flex-basis: 100%; order: 3; } .filters button:disabled { display: none; } .filters input { width: 130px; } .caption { display: none; } .dialog .caption { display: block; } .wire .card { flex-basis: 250px; } }
 
 @media (max-width: 768px) { .wire:has(button[aria-expanded="false"]) .toolbar { flex-wrap: nowrap; } .wire:has(button[aria-expanded="false"]) .status, .wire:has(button[aria-expanded="false"]) .healthy { display: none; } }
+@media (max-width: 1100px) { .embedded .cards { grid-template-columns:repeat(2,minmax(220px,1fr)); } }
+@media (max-width: 700px) { .embedded .cards { display:flex; } }

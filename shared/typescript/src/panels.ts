@@ -29,10 +29,43 @@ export const PriceQuoteSchema = z.object({
   sourceAsOf: z.iso.datetime(),
   receivedAt: z.iso.datetime(),
   fresh: z.boolean(),
+  change: z.number().optional(),
+  changePct: z.number().optional(),
 });
 export type PriceQuote = z.infer<typeof PriceQuoteSchema>;
 export const PricesDataSchema = z.array(PriceQuoteSchema);
 export const PricesPanelSchema = panel(PricesDataSchema);
+
+export const EodIntelligenceDataSchema = z.object({
+  reportDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  cashActivityDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  participantOiDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  sectorPerformanceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  cashActivity: z.array(z.object({
+    category: z.enum(["FII/FPI", "DII"]),
+    buyCrore: z.number(),
+    sellCrore: z.number(),
+    netCrore: z.number(),
+  })).nullable(),
+  participantOi: z.array(z.object({
+    category: z.enum(["Client", "DII", "FII", "Pro"]),
+    futureIndexLong: z.number().int().nonnegative(),
+    futureIndexShort: z.number().int().nonnegative(),
+    optionIndexCallLong: z.number().int().nonnegative(),
+    optionIndexPutLong: z.number().int().nonnegative(),
+    optionIndexCallShort: z.number().int().nonnegative(),
+    optionIndexPutShort: z.number().int().nonnegative(),
+  })).nullable(),
+  sectorPerformance: z.array(z.object({
+    instrumentId: z.string().min(1),
+    label: z.string().min(1),
+    close: z.number().positive(),
+    change: z.number(),
+    changePct: z.number(),
+  })).nullable(),
+});
+export type EodIntelligenceData = z.infer<typeof EodIntelligenceDataSchema>;
+export const EodIntelligencePanelSchema = panel(EodIntelligenceDataSchema);
 
 /** Gross minus charges must equal net exactly -- this is the "explicit accounting
  * math" requirement, enforced at parse time rather than trusted from the caller.

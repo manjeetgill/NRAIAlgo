@@ -12,6 +12,7 @@ import {
   PositionsPanelSchema,
   MarketStreamSchema,
   BrokerOrdersPanelSchema,
+  EodIntelligencePanelSchema,
 } from "./panels.js";
 
 /** The Overview screen's whole state in one response. A database snapshot is not a
@@ -42,6 +43,7 @@ export const OverviewSnapshotSchema = z.object({
   positions: PositionsPanelSchema.optional(),
   marketStream: MarketStreamSchema.optional(),
   brokerOrders: BrokerOrdersPanelSchema.optional(),
+  eodIntelligence: EodIntelligencePanelSchema.optional(),
   // Per-provider evidence: a partial aggregate must not block a healthy broker
   // or let a failed broker borrow another broker's reconciliation timestamp.
   brokerReconciliation: z.object({

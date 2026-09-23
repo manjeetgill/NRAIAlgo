@@ -11,7 +11,7 @@ function stamp(value: string | null) {
   return new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(new Date(value)) + " IST";
 }
 
-export function AlphaWire({ enabled, initiallyCollapsed = false }: { enabled: boolean; initiallyCollapsed?: boolean }) {
+export function AlphaWire({ enabled, initiallyCollapsed = false, embedded = false }: { enabled: boolean; initiallyCollapsed?: boolean; embedded?: boolean }) {
   const [snapshot, setSnapshot] = useState<AlphaWireSnapshot | null>(null);
   const [connected, setConnected] = useState(false);
   const [query, setQuery] = useState("");
@@ -25,13 +25,14 @@ export function AlphaWire({ enabled, initiallyCollapsed = false }: { enabled: bo
   const cards = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (embedded) return;
     let cancelled = false;
     try {
       const saved = window.localStorage.getItem(COLLAPSE_PREFERENCE_KEY);
       if (saved !== null) queueMicrotask(() => { if (!cancelled) setCollapsed(saved === "true"); });
     } catch { /* Storage can be disabled; the safe default still applies. */ }
     return () => { cancelled = true; };
-  }, []);
+  }, [embedded]);
 
   const setCollapsePreference = (value: boolean) => {
     setCollapsed(value);
@@ -84,14 +85,14 @@ export function AlphaWire({ enabled, initiallyCollapsed = false }: { enabled: bo
   const items = (snapshot?.items ?? []).filter(item => (category === "All" || item.category === category) && (provider === 'All' || item.source === provider) && `${item.title} ${item.source} ${item.publisher ?? ''} ${(item.symbols ?? []).join(' ')}`.toLowerCase().includes(query.toLowerCase()));
   const selectedUrl = selected ? safeNewsUrl(selected.url) : null;
 
-  return <section className={styles.wire} aria-label="Alpha Wire announcements">
+  return <section className={`${styles.wire} ${embedded ? styles.embedded : ""}`} aria-label="Alpha Wire announcements">
     <div className={styles.toolbar}>
-      <strong className={styles.brand}><span aria-hidden="true">◉</span> ALPHA WIRE</strong>
+      <strong className={styles.brand}><span aria-hidden="true">◉</span> {embedded ? "AFTER-MARKET NEWS WIRE & AI OVERNIGHT INTELLIGENCE" : "ALPHA WIRE"}</strong>
       <span className={connected && healthy === sources.length && healthy > 0 ? styles.healthy : styles.status} role="status">{status}</span>
       <button type="button" onClick={() => { setUnread(0); setCollapsePreference(false); }}>{unread ? `${unread} new · Mark read` : `${snapshot?.items.length ?? 0} headlines`}</button>
-      <button type="button" className={styles.collapse} aria-expanded={!collapsed} aria-controls="alpha-wire-content" onClick={() => setCollapsePreference(!collapsed)}>{collapsed ? "Expand" : "Collapse"}</button>
+      {!embedded && <button type="button" className={styles.collapse} aria-expanded={!collapsed} aria-controls="alpha-wire-content" onClick={() => setCollapsePreference(!collapsed)}>{collapsed ? "Expand" : "Collapse"}</button>}
     </div>
-    {!collapsed && <div id="alpha-wire-content">
+    {(!collapsed || embedded) && <div id="alpha-wire-content">
       <div className={styles.filters}>
         {['All', 'Announcements', 'News', 'Macro', 'Regulatory', 'Social'].map(label => <button key={label} type="button" aria-pressed={category === label} onClick={() => setCategory(label)}>{label}</button>)}
         <button type="button" disabled title="Options alert calculations are not configured">Options</button>

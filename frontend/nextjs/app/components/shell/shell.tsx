@@ -65,6 +65,11 @@ export function Shell({ children, extraHeaderBar, email, onSignOut }: ShellProps
   const isLive = snapshot?.scope.context === "LIVE";
   const safety = snapshot?.readiness.data;
   const passed = safety ? Object.values(safety.checks).filter((check) => check.status === "passed").length : 0;
+  const closedOverview = pathname === "/app/overview" && snapshot?.session.data?.calendarValid && (snapshot.session.data.state === "after-close" || snapshot.session.data.state === "weekend-holiday");
+  const officialCloses = snapshot?.prices.data ?? [];
+  const bhavcopyMatched = snapshot?.prices.status === "available" && officialCloses.length > 0 && officialCloses.every(quote => quote.priceBasis === "official-close");
+  const reauthProvider = snapshot?.configuredProviders?.find(provider => !snapshot.authorizedProviders?.includes(provider));
+  const providerName = reauthProvider ? ({ zerodha: "Zerodha", kotak: "Kotak", icici: "ICICI" }[reauthProvider] ?? reauthProvider) : null;
   return (
     <ShellOverviewContext.Provider value={setOverview}>
     <div className={styles.shell}>
@@ -72,7 +77,20 @@ export function Shell({ children, extraHeaderBar, email, onSignOut }: ShellProps
         Skip to content
       </a>
 
-      <div className={`${styles.executionStrip} ${isLive ? styles.liveStrip : ""}`} role="status">
+      {closedOverview && <header className={styles.closedShellHeader}>
+        <div className={styles.closedBrand}><span className="material-symbols-outlined" aria-hidden="true">monitoring</span><strong>NRAIAlgo</strong></div>
+        <div className={styles.closedTerminalTitle}>NRAIAlgo<br/>Terminal</div>
+        <div className={styles.closedSessionBadge}><strong>IST {istLabel}</strong><span>Market closed · post-market reconciliation</span></div>
+        <div className={styles.closedClocks}>IST {istLabel}<span>|</span> GST {gstLabel}<span>|</span> NY {estLabel}</div>
+        <div className={styles.closedHeaderActions}>
+          <button type="button" disabled title="EOD PDF export is not connected"><span className="material-symbols-outlined" aria-hidden="true">picture_as_pdf</span>Export EOD PDF</button>
+          <span className={bhavcopyMatched ? styles.reconciledBadge : styles.pendingBadge}><span className="material-symbols-outlined" aria-hidden="true">{bhavcopyMatched ? "done_all" : "schedule"}</span>{bhavcopyMatched ? "Bhavcopy matched" : "Bhavcopy pending"}</span>
+          <Link className={styles.reauthAction} href={`/app/broker-connections${reauthProvider ? `#${reauthProvider}` : ""}`}><span className="material-symbols-outlined" aria-hidden="true">refresh</span>{providerName ? `Re-auth ${providerName}` : "Broker gateways"}</Link>
+        </div>
+        <details className={`${styles.accountMenu} ${styles.closedAccountMenu}`}><summary title={email ?? "Account"}><span className="material-symbols-outlined" aria-label="Account">person</span></summary><div><strong>{email ?? "Not signed in"}</strong><Link href="/app/broker-connections">Account settings &amp; broker connections</Link><ThemeToggle />{email && onSignOut && <button type="button" onClick={onSignOut}>Sign out</button>}</div></details>
+      </header>}
+
+      {!closedOverview && <div className={`${styles.executionStrip} ${isLive ? styles.liveStrip : ""}`} role="status">
         <div className={styles.stripLabel}>
           <span className={styles.stripDot} aria-hidden="true" />
           <span className={styles.stripText}>
@@ -88,9 +106,9 @@ export function Shell({ children, extraHeaderBar, email, onSignOut }: ShellProps
             Execution locked
           </button>
         </div>
-      </div>
+      </div>}
 
-      <div className={styles.metricsBar}>
+      {!closedOverview && <div className={styles.metricsBar}>
         <div className={styles.clockGroup}>
           <button
             type="button"
@@ -132,7 +150,7 @@ export function Shell({ children, extraHeaderBar, email, onSignOut }: ShellProps
             </span>
           </span>
         </div>
-      </div>
+      </div>}
 
       <div className={styles.extraHeaderBar}>{extraHeaderBar}</div>
 
@@ -201,7 +219,7 @@ export function Shell({ children, extraHeaderBar, email, onSignOut }: ShellProps
         </nav>
 
         <main id="main-content" className={styles.main}>
-          {pathname === "/app/overview" && <AlphaWire enabled={!!email} initiallyCollapsed />}
+          {pathname === "/app/overview" && !closedOverview && <AlphaWire enabled={!!email} initiallyCollapsed />}
           {children}
           {pathname !== "/app/overview" && <AlphaWire key={pathname} enabled={!!email} initiallyCollapsed />}
         </main>

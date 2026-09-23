@@ -13,6 +13,8 @@ import { PreOpenScreen } from "./pre-open-screen";
 import { AccountDetails } from "./account-details";
 import { brokerView, selectedProviders, hasCoreCoverage, type BrokerView } from "./broker-view";
 import { useIciciAccount, iciciHoldings } from "./use-icici-account";
+import { iciciPositions } from "./icici-model";
+import type { OpenPositionView } from "./open-positions";
 import { withIciciOverviewStatus } from "./icici-overview-status";
 import { useShellOverview } from "@/app/components/shell/overview-context";
 
@@ -25,9 +27,34 @@ function NonLiveDashboard({ snapshot, layout, layoutOnly = false, icici }: { sna
     rows: [...(scoped.holdings.data?.holdings ?? []), ...(includeIcici ? iciciHoldings(icici.account) : [])],
     complete: hasCoreCoverage(snapshot, selectedBroker, "holdings") && (!includeIcici || (!icici.stale && icici.account?.sections.portfolioholdings?.status === "available")),
   };
+  const nativePositions: OpenPositionView[] = (scoped.positions?.data ?? []).filter(row => row.quantity !== 0).map(row => ({
+    id: `${row.provider}:${row.accountId}:${row.exchange}:${row.symbol}:${row.product}`,
+    provider: row.provider,
+    account: row.accountId,
+    symbol: row.symbol,
+    exchange: row.exchange,
+    product: row.product,
+    quantity: row.quantity,
+    average: row.averagePrice,
+    ltp: row.lastPrice,
+    previousClose: row.previousClose ?? null,
+    pnlPaise: row.pnlPaise,
+    mtmPaise: row.mtmPaise ?? null,
+    side: row.quantity < 0 ? "SELL" : "BUY",
+    asOf: row.asOf,
+    fresh: row.fresh,
+  }));
+  const iciciPositionRows = includeIcici && icici.account
+    ? iciciPositions(icici.account.sections.portfoliopositions?.rows ?? [], icici.account.accountId, icici.account.sections.portfoliopositions?.asOf ?? icici.account.asOf)
+    : [];
+  const accountPositions = {
+    rows: [...nativePositions, ...iciciPositionRows],
+    complete: hasCoreCoverage(snapshot, selectedBroker, "positions") && (!includeIcici || (!icici.stale && icici.account?.sections.portfoliopositions?.status === "available")),
+    includesIcici: includeIcici,
+  };
   return <>
     <BrokerFilter value={selectedBroker} onChange={setSelectedBroker} />
-    {layout === "pre-open" ? <PreOpenScreen snapshot={scoped} layoutOnly={layoutOnly} accountHoldings={accountHoldings} /> : <MarketClosedScreen snapshot={scoped} {...(layoutOnly ? { layout } : {})} accountHoldings={accountHoldings} />}
+    {layout === "pre-open" ? <PreOpenScreen snapshot={scoped} layoutOnly={layoutOnly} accountHoldings={accountHoldings} /> : <MarketClosedScreen snapshot={scoped} {...(layoutOnly ? { layout } : {})} accountHoldings={accountHoldings} accountPositions={accountPositions} />}
     <AccountDetails iciciStale={icici.stale} snapshot={scoped} broker={selectedBroker} account={icici.account} status={icici.status} />
   </>;
 }

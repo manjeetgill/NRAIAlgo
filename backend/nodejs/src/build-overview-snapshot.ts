@@ -34,6 +34,7 @@ import type { Query } from "./database/database.js";
 import type { credentialVault } from "./credential-vault.js";
 import { resolveSessionState } from "./market-calendar.js";
 import { fetchNseIndexCloses } from "./nse-bhavcopy.js";
+import { fetchNseEodIntelligence } from "./nse-eod-intelligence.js";
 import { fetchZerodhaPortfolio } from "./broker-auth/zerodha-portfolio.js";
 import { fetchKotakPortfolio } from "./broker-auth/kotak-portfolio.js";
 import { fetchZerodhaOrders } from "./broker-auth/zerodha-orders.js";
@@ -71,8 +72,9 @@ export interface SnapshotDeps {
   fetchZerodhaPortfolio: typeof fetchZerodhaPortfolio;
   fetchKotakPortfolio: typeof fetchKotakPortfolio;
   fetchZerodhaOrders?: typeof fetchZerodhaOrders;
+  fetchNseEodIntelligence?: typeof fetchNseEodIntelligence;
 }
-const REAL_DEPS: SnapshotDeps = { fetchNseIndexCloses, fetchZerodhaPortfolio, fetchKotakPortfolio, fetchZerodhaOrders };
+const REAL_DEPS: SnapshotDeps = { fetchNseIndexCloses, fetchZerodhaPortfolio, fetchKotakPortfolio, fetchZerodhaOrders, fetchNseEodIntelligence };
 
 async function buildPricesPanel(
   session: OverviewSnapshot["session"],
@@ -406,10 +408,18 @@ export async function buildOverviewSnapshot(
   const pricesPromise = inputs.zerodha && inputs.session.data?.state === "market-open"
     ? unavailablePanel("zerodha-websocket", "WAITING_FOR_LIVE_TICKS")
     : buildPricesPanel(inputs.session, nowIso, deps);
-  const [{ pnl, brokerPnl, holdings, positions, connectedProviders, brokerReconciliation }, brokerOrders, prices] = await Promise.all([
+  const lastCompletedSession = inputs.session.data?.lastCompletedSession;
+  const intelligencePromise = deps.fetchNseEodIntelligence && lastCompletedSession
+    ? deps.fetchNseEodIntelligence(lastCompletedSession).then(({data, missing}): NonNullable<OverviewSnapshot["eodIntelligence"]> => missing.length
+      ? { status: "degraded", source: "nse-eod-reports", asOf: nowIso, version: 1, reason: `Missing: ${missing.join(", ")}`, data }
+      : { status: "available", source: "nse-eod-reports", asOf: nowIso, version: 1, reason: null, data }
+    ).catch(caught => unavailablePanel("nse-eod-reports", caught instanceof Error ? caught.message : "NSE EOD intelligence unavailable"))
+    : undefined;
+  const [{ pnl, brokerPnl, holdings, positions, connectedProviders, brokerReconciliation }, brokerOrders, prices, eodIntelligence] = await Promise.all([
     buildPortfolioPanels(inputs, scope, now, deps),
     inputs.zerodha && deps.fetchZerodhaOrders ? deps.fetchZerodhaOrders(inputs.zerodha) : undefined,
     pricesPromise,
+    intelligencePromise,
   ]);
   const expectedProviders = inputs.configuredProviders ?? connectedProviders;
   const authorizedProviders = [
@@ -436,6 +446,7 @@ export async function buildOverviewSnapshot(
     sourceWatermarks: { accountVersion: 0, eventCursor: "none" },
     session: inputs.session,
     prices,
+    ...(eodIntelligence ? { eodIntelligence } : {}),
     pnl: pnlWithPerformance,
     brokerPnl,
     holdings,
