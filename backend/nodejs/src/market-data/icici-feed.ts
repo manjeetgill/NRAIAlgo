@@ -59,12 +59,27 @@ export function instrumentLookupKey(instrument: Omit<IciciInstrument, "key">): s
   return `${exchange}|${stock}|${kind}|${canonicalExpiry(instrument.expiryDate)}|${kind === "OPT" ? canonicalStrike(instrument.strikePrice) : ""}|${kind === "OPT" ? optionRight(instrument.right) : ""}`;
 }
 
-function download(url: string): Promise<Buffer> {
+// Only the official ICICI Direct domain, over HTTPS: a redirect must stay
+// inside the same trusted host family, never follow an attacker- or
+// misconfigured-server-supplied location to an arbitrary host.
+function safeMasterRedirect(location: string, from: string): string | null {
+  try {
+    const url = new URL(location, from);
+    if (url.protocol !== "https:" || url.username || url.password) return null;
+    if (!/(^|\.)icicidirect\.com$/i.test(url.hostname)) return null;
+    return url.href;
+  } catch { return null; }
+}
+
+function download(url: string, redirectsLeft = 5): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const req = request(url, { method: "GET" }, response => {
       if (response.statusCode && response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
         response.resume();
-        download(new URL(response.headers.location, url).href).then(resolve, reject);
+        if (redirectsLeft <= 0) { reject(new Error("ICICI security master redirected too many times")); return; }
+        const next = safeMasterRedirect(response.headers.location, url);
+        if (!next) { reject(new Error("ICICI security master redirected to an untrusted location")); return; }
+        download(next, redirectsLeft - 1).then(resolve, reject);
         return;
       }
       if (response.statusCode !== 200) { response.resume(); reject(new Error("ICICI security master unavailable")); return; }
