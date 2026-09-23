@@ -1,0 +1,23 @@
+{
+  "name": "nraialgo",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "prepare-contracts": "npm run build --workspace apps/contracts",
+    "dev": "npm run prepare-contracts && npm run db:setup --workspace apps/api && concurrently -n api,web -c blue,green \"npm run dev --workspace apps/api\" \"npm run dev --workspace apps/web\"",
+    "build": "npm run prepare-contracts && npm run build --workspaces",
+    "test": "npm run prepare-contracts && npm run test --workspaces",
+    "lint": "npm run lint --workspaces",
+    "typecheck": "npm run prepare-contracts && npm run typecheck --workspaces"
+  },
+  "devDependencies": {
+    "concurrently": "10.0.5",
+    "typescript": "5.9.3"
+  }
+}

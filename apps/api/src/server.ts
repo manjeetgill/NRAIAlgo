@@ -1,0 +1,51 @@
+import sensible from "@fastify/sensible";
+import rateLimit from "@fastify/rate-limit";
+import cookie from "@fastify/cookie";
+import Fastify, { type FastifyInstance } from "fastify";
+import { healthRoutes, readinessRoutes } from "./routes/health.js";
+import { authRoutes } from "./routes/auth.js";
+import { overviewRoutes } from "./routes/overview.js";
+import { brokerCredentialsRoutes } from "./routes/broker-credentials.js";
+import { brokerAuthRoutes } from "./routes/broker-auth.js";
+import type { Store } from "./database.js";
+import { credentialVault } from "./credential-vault.js";
+import type { exchangeZerodhaRequestToken } from "./broker-auth/zerodha.js";
+import type { kotakDailyLogin } from "./broker-auth/kotak.js";
+
+/**
+ * Builds a Fastify instance without binding a port.
+ *
+ * Kept separate from main.ts specifically so tests can exercise routes
+ * through `.inject()` -- no listening socket, no port conflicts between
+ * parallel test runs, and no risk of a test accidentally making a real
+ * network call.
+ *
+ * Takes the database Store and credential vault as explicit dependencies
+ * rather than opening its own connection/key, so tests can inject a real
+ * store (integration) or a stub (routes that never touch it, like /health).
+ */
+export function buildServer(
+  store: Store,
+  vault = credentialVault(),
+  brokerAuthDeps: {
+    exchangeZerodhaRequestToken?: typeof exchangeZerodhaRequestToken;
+    kotakDailyLogin?: typeof kotakDailyLogin;
+  } = {},
+): FastifyInstance {
+  const app = Fastify({ logger: true });
+
+  app.register(sensible);
+  app.register(cookie);
+  // Global backstop, keyed by IP (no authenticated principal exists yet to
+  // key on instead). Login/credential routes set their own much tighter
+  // per-route limits below -- this default just caps ordinary polling/reads.
+  app.register(rateLimit, { global: true, max: 300, timeWindow: "1 minute" });
+  app.register(healthRoutes);
+  app.register(readinessRoutes(store));
+  app.register(authRoutes(store));
+  app.register(overviewRoutes(store, vault));
+  app.register(brokerCredentialsRoutes(store, vault));
+  app.register(brokerAuthRoutes(store, vault, brokerAuthDeps));
+
+  return app;
+}

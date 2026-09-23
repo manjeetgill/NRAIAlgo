@@ -1,0 +1,119 @@
+/**
+ * Design tokens matching the approved "NRIAlgo Institutional Pro"
+ * design system (Stitch-generated DESIGN.md). This product is a dark
+ * trading terminal by design, not a light/dark-adaptive app -- every
+ * visual reference given for it (the original PDF mockup and this
+ * design system) is dark-only, so these tokens are applied
+ * unconditionally rather than behind prefers-color-scheme.
+ */
+:root {
+  color-scheme: dark;
+
+  --color-surface-base: #0b0e14;
+  --color-surface-subtle: #121824;
+  --color-surface-elevated: #1a2234;
+  --color-surface-overlay: #202b42;
+  --color-surface-container: #1d2026;
+  --color-surface-container-low: #191c22;
+  --color-surface-container-lowest: #0b0e14;
+  --color-surface-container-high: #272a31;
+  --color-surface-container-highest: #32353c;
+  --color-surface-bright: #363940;
+
+  --color-border-subtle: #232f46;
+  --color-border-strong: #2d3b55;
+  --color-border-accent: #3b82f6;
+
+  --color-text-primary: #f1f5f9;
+  --color-text-secondary: #94a3b8;
+  --color-text-muted: #64748b;
+  --color-text-inverse: #0b0e14;
+
+  --color-primary: #4edea3;
+  --color-on-primary: #003824;
+
+  --color-live-crimson: #ef4444;
+  --color-live-crimson-deep: #dc2626;
+  --color-live-glow: rgba(239, 68, 68, 0.2);
+  --color-paper-amber: #f59e0b;
+  --color-paper-amber-deep: #d97706;
+  --color-paper-glow: rgba(245, 158, 11, 0.15);
+  --color-success-emerald: #10b981;
+  --color-success-emerald-deep: #059669;
+  --color-killswitch-dark: #7f1d1d;
+  --color-state-purple: #a855f7;
+
+  --color-latency-good: #10b981;
+  --color-latency-warning: #f59e0b;
+  --color-latency-critical: #ef4444;
+
+  /* Semantic aliases used by earlier-built components; point them at
+     the terminal palette above so existing screens inherit it without
+     a rename pass. */
+  --color-bg: var(--color-surface-base);
+  --color-bg-raised: var(--color-surface-subtle);
+  --color-fg: var(--color-text-primary);
+  --color-fg-muted: var(--color-text-secondary);
+  --color-border: var(--color-border-subtle);
+  --color-accent: var(--color-border-accent);
+
+  --color-status-positive-bg: rgba(16, 185, 129, 0.12);
+  --color-status-positive-fg: var(--color-success-emerald);
+  --color-status-negative-bg: rgba(239, 68, 68, 0.12);
+  --color-status-negative-fg: var(--color-live-crimson);
+  --color-status-warning-bg: rgba(245, 158, 11, 0.12);
+  --color-status-warning-fg: var(--color-paper-amber);
+  --color-status-neutral-bg: var(--color-surface-container-high);
+  --color-status-neutral-fg: var(--color-text-secondary);
+
+  --color-live-bg: var(--color-live-crimson-deep);
+  --color-live-fg: #ffffff;
+  --color-paper-bg: var(--color-paper-amber-deep);
+  --color-paper-fg: #1a1300;
+
+  --color-shell-bg: var(--color-surface-subtle);
+  --color-shell-fg: var(--color-text-primary);
+  --color-shell-fg-muted: var(--color-text-muted);
+  --color-shell-active-bg: var(--color-surface-elevated);
+  --color-shell-active-fg: var(--color-primary);
+  --color-shell-border: var(--color-border-subtle);
+  --color-shell-accent: var(--color-primary);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--color-surface-base);
+  color: var(--color-text-primary);
+  font-family:
+    var(--font-inter),
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif;
+}
+
+.font-mono-data {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+}
+
+.material-symbols-outlined {
+  font-family: "Material Symbols Outlined";
+  font-weight: normal;
+  font-style: normal;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  font-variation-settings:
+    "FILL" 0,
+    "wght" 400,
+    "GRAD" 0,
+    "opsz" 24;
+}

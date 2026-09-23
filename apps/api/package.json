@@ -1,0 +1,36 @@
+{
+  "name": "@nraialgo/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "build": "tsc",
+    "start": "node dist/main.js",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:smoke": "vitest run --config vitest.smoke.config.ts",
+    "db:setup": "tsx src/local-database.ts",
+    "db:stop": "tsx src/local-database.ts --stop",
+    "create-user": "tsx src/create-user.ts"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11.1.2",
+    "@fastify/rate-limit": "^10.3.0",
+    "@fastify/sensible": "6.0.5",
+    "@nraialgo/contracts": "*",
+    "fastify": "5.12.5",
+    "kiteconnect": "5.3.0",
+    "pg": "^8.16.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.4",
+    "@types/pg": "^8.23.1",
+    "eslint": "9.39.5",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.70.0",
+    "vitest": "5.0.1"
+  }
+}
