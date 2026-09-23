@@ -9,7 +9,7 @@
     "build": "tsc",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "node ../../tests/run.mjs contracts"
   },
   "dependencies": {
     "zod": "^4.0.0"

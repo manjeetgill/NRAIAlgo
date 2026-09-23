@@ -1,0 +1,10 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "lib": ["ES2022", "dom", "dom.iterable"],
+    "paths": { "@/*": ["../apps/web/*"] }
+  },
+  "include": ["api/**/*.ts", "contracts/**/*.ts", "fixtures/**/*.ts", "vitest.config.ts"]
+}

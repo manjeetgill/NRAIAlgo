@@ -9,7 +9,7 @@
     "start": "next start --port 3010",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "node ../../tests/run.mjs web"
   },
   "dependencies": {
     "@nraialgo/contracts": "*",

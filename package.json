@@ -12,9 +12,13 @@
     "prepare-contracts": "npm run build --workspace apps/contracts",
     "dev": "npm run prepare-contracts && npm run db:setup --workspace apps/api && concurrently -n api,web -c blue,green \"npm run dev --workspace apps/api\" \"npm run dev --workspace apps/web\"",
     "build": "npm run prepare-contracts && npm run build --workspaces",
-    "test": "npm run prepare-contracts && npm run test --workspaces",
-    "lint": "npm run lint --workspaces",
-    "typecheck": "npm run prepare-contracts && npm run typecheck --workspaces"
+    "test": "npm run prepare-contracts && node tests/run.mjs",
+    "test:api": "npm run prepare-contracts && node tests/run.mjs api",
+    "test:web": "npm run prepare-contracts && node tests/run.mjs web",
+    "test:contracts": "npm run prepare-contracts && node tests/run.mjs contracts",
+    "test:smoke": "node tests/run.mjs smoke",
+    "lint": "npm run lint --workspaces && eslint --config tests/eslint.config.mjs tests",
+    "typecheck": "npm run prepare-contracts && npm run typecheck --workspaces && tsc --project tests/tsconfig.json && tsc --project tests/web/tsconfig.json"
   },
   "overrides": {
     "kiteconnect": {
@@ -24,6 +28,7 @@
     }
   },
   "devDependencies": {
+    "adm-zip": "^0.6.1",
     "concurrently": "10.0.5",
     "typescript": "5.9.3"
   }

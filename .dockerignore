@@ -15,3 +15,5 @@
 **/*.key
 **/*.log
 .DS_Store
+tests
+docs

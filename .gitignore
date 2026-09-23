@@ -11,3 +11,5 @@ coverage/
 .DS_Store
 *.tsbuildinfo
 .runtime/
+__pycache__/
+*.pyc
