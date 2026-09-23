@@ -57,7 +57,7 @@ export class KotakLiveOverview {
     if (updated && attributed?.data) {
       attributed.data.grossPaise += delta; attributed.data.unrealisedPaise += delta;
       if (attributed.data.netPaise != null) attributed.data.netPaise += delta;
-      attributed.data.valuationAsOf = iso; attributed.source = "kotak+kotak-tick-estimate";
+      attributed.data.valuationAsOf = iso; attributed.source = "kotak+tick-estimate";
     }
     if(updated&&snapshot.pnl.data){snapshot.pnl.data.grossPaise+=delta;snapshot.pnl.data.unrealisedPaise+=delta;if(snapshot.pnl.data.netPaise!==null)snapshot.pnl.data.netPaise+=delta;snapshot.pnl.data.valuationAsOf=iso;snapshot.pnl.source+='+kotak-tick-estimate';}
     if(accountStale||e.pending)degradeAccountPanels(snapshot,'Kotak');
