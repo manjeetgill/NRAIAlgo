@@ -241,4 +241,14 @@ describe("Zerodha order-book read model", () => {
     expect(panel.data).toBeNull();
     expect(JSON.stringify(panel)).not.toContain("secret-token");
   });
+  it("caps the order book at the most recent 50 orders, matching the UI's stated coverage", async () => {
+    const orders = Array.from({ length: 75 }, (_, index) => ({
+      order_id: `order-${index}`, tradingsymbol: "TEST", exchange: "NSE", product: "MIS", transaction_type: "BUY", status: "OPEN", quantity: 1, filled_quantity: 0, average_price: 0,
+    })) as unknown as Awaited<ReturnType<Connect["getOrders"]>>;
+    const panel = await fetchZerodhaOrders(credentials, () => ({ setAccessToken() {}, getOrders: async () => orders }));
+    expect(panel.data).toHaveLength(50);
+    // Kite returns oldest-first; the panel shows newest-first, so the last-placed order comes first.
+    expect(panel.data?.[0]?.orderId).toBe("order-74");
+    expect(panel.data?.[49]?.orderId).toBe("order-25");
+  });
 });
