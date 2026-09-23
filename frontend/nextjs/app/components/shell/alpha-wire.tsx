@@ -95,7 +95,6 @@ export function AlphaWire({ enabled, initiallyCollapsed = false, embedded = fals
     {(!collapsed || embedded) && <div id="alpha-wire-content">
       <div className={styles.filters}>
         {['All', 'Announcements', 'News', 'Macro', 'Regulatory', 'Social'].map(label => <button key={label} type="button" aria-pressed={category === label} onClick={() => setCategory(label)}>{label}</button>)}
-        <button type="button" disabled title="Options alert calculations are not configured">Options</button>
         <select aria-label="Filter by news source" value={provider} onChange={event => setProvider(event.target.value)}>
           <option value="All">All sources</option>{sources.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
         </select>

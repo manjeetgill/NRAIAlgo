@@ -171,6 +171,44 @@ export const PositionRowSchema = z.object({
 });
 export type PositionRow = z.infer<typeof PositionRowSchema>;
 export const PositionsPanelSchema = panel(z.array(PositionRowSchema));
+
+export const CalculationReconciliationDataSchema = z.object({
+  overallStatus: z.enum(["reconciled", "partial", "mismatch"]),
+  coverage: z.object({
+    expectedProviders: z.array(z.string()),
+    receivedProviders: z.array(z.string()),
+    positionsReported: z.number().int().nonnegative(),
+    positionsWithDayMtm: z.number().int().nonnegative(),
+    positionsWithCalculatedOpenPnl: z.number().int().nonnegative(),
+    holdingsReported: z.number().int().nonnegative(),
+    holdingsWithValuationInputs: z.number().int().nonnegative(),
+    brokerBalancesReported: z.number().int().nonnegative(),
+  }),
+  calculated: z.object({
+    dayMtmPaise: paise().nullable(),
+    openPositionPnlPaise: paise().nullable(),
+    holdingsMarketValuePaise: paise().nullable(),
+    holdingsInvestedPaise: paise().nullable(),
+    holdingsUnrealizedPaise: paise().nullable(),
+    availableMarginPaise: paise().nullable(),
+    usedMarginPaise: paise().nonnegative().nullable(),
+    collateralPaise: paise().nonnegative().nullable(),
+  }),
+  checks: z.array(z.object({
+    id: z.string().min(1),
+    label: z.string().min(1),
+    status: z.enum(["matched", "mismatch", "not_evaluable"]),
+    unit: z.enum(["paise", "count"]),
+    expectedValue: z.number().int().nullable(),
+    actualValue: z.number().int().nullable(),
+    difference: z.number().int().nullable(),
+    tolerance: z.number().int().nonnegative(),
+    reason: z.string().nullable(),
+  })),
+});
+export type CalculationReconciliationData = z.infer<typeof CalculationReconciliationDataSchema>;
+export const CalculationReconciliationPanelSchema = panel(CalculationReconciliationDataSchema);
+
 export const BrokerOrdersPanelSchema = panel(z.array(z.object({
   details: z.record(z.string(), z.union([z.string(),z.number().finite(),z.boolean(),z.null()])).optional(),
   orderId: z.string(), symbol: z.string(), exchange: z.string(), product: z.string(),

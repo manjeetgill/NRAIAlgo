@@ -42,6 +42,7 @@ import { ZerodhaSessionSchema } from "./broker-auth/zerodha.js";
 import { KotakSessionSchema } from "./broker-auth/kotak.js";
 import { iciciSession } from "./broker-auth/icici.js";
 import { loadSessionPerformance, type SessionPerformance } from "./session-performance.js";
+import { calculateAndReconcilePortfolio } from "./calculation-reconciliation.js";
 import { z } from "zod";
 
 const NO_SESSION: [string, string] = ["none", "NO_AUTHORIZED_BROKER_SESSION"];
@@ -433,6 +434,25 @@ export async function buildOverviewSnapshot(
   // they describe workspace history, independent of whether *today's*
   // broker read happened to succeed, degrade or fail.
   const pnlWithPerformance = pnl.data ? { ...pnl, data: { ...pnl.data, performance: inputs.performance } } : pnl;
+  const calculationData = calculateAndReconcilePortfolio({
+    pnl: pnl.data,
+    holdings: holdings.data,
+    positions: positions?.data ?? null,
+    expectedProviders,
+    receivedProviders: connectedProviders,
+  });
+  const calculationReconciliation: NonNullable<OverviewSnapshot["calculationReconciliation"]> = calculationData.overallStatus === "reconciled"
+    ? { status: "available", source: "calculation-reconciliation-service", asOf: nowIso, version: 1, reason: null, data: calculationData }
+    : {
+        status: "degraded",
+        source: "calculation-reconciliation-service",
+        asOf: nowIso,
+        version: 1,
+        reason: calculationData.overallStatus === "mismatch"
+          ? "One or more calculated values differs from broker-reported data."
+          : "Some calculations cannot be reconciled because required broker inputs are unavailable.",
+        data: calculationData,
+      };
 
   return {
     schemaVersion: 1,
@@ -447,6 +467,7 @@ export async function buildOverviewSnapshot(
     session: inputs.session,
     prices,
     ...(eodIntelligence ? { eodIntelligence } : {}),
+    calculationReconciliation,
     pnl: pnlWithPerformance,
     brokerPnl,
     holdings,

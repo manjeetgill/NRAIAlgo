@@ -22,6 +22,7 @@ describe('multi-broker dashboard composition',()=>{
   const result=await buildOverviewSnapshot(inputs,now,fixture.scope,deps);
   expect(result.positions?.data?.map(p=>p.provider)).toEqual(['zerodha','kotak']);
   expect(result.pnl.data?.grossPaise).toBe(fixture.pnl.data!.grossPaise*2);
+  expect(result.calculationReconciliation?.data?.coverage).toMatchObject({expectedProviders:['kotak','zerodha'],receivedProviders:['kotak','zerodha'],positionsReported:2});
   const failed=await buildOverviewSnapshot(inputs,now,fixture.scope,{...deps,fetchKotakPortfolio:async()=>{throw Error('unavailable');}});
   expect(failed.positions?.status).toBe('degraded');
   expect(failed.pnl.status).toBe('degraded');

@@ -47,7 +47,7 @@ describe("Alpha Wire", () => {
     fireEvent.click(screen.getByRole("button", { name: "1 new · Mark read" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "2 headlines" })).toBeInTheDocument());
     expect(screen.getByRole("button", { name: "Social" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Options" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Options" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Collapse" }));
     expect(screen.queryByText(item.title)).not.toBeInTheDocument();
   });

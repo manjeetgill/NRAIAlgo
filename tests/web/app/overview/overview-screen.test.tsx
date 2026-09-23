@@ -195,14 +195,15 @@ describe("closed market layouts", () => {
     expect(screen.getByRole("heading", { name: "Participant Flow Matrix (EOD)" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "EOD Sector Index Performance" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Alpha Wire announcements" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Arm at next open" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Arm at next open" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Review execution prerequisites" })).toHaveAttribute("href", "/app/broker-connections");
   });
 
   it("uses the calendar's next trading day, not a hardcoded Monday", () => {
     render(<OverviewScreen snapshot={OVERVIEW_SNAPSHOT_FIXTURES["weekend-holiday"]} />);
     expect(screen.getByText("2026-09-22")).toBeInTheDocument();
     expect(screen.getByText("Weekly equity history unavailable")).toBeInTheDocument();
-    expect(screen.getByText(/Reported period: Unavailable/)).toBeInTheDocument();
+    expect(screen.getByText(/Reported period: Current open positions/)).toBeInTheDocument();
     expect(screen.getAllByRole("tab")).toHaveLength(3);
   });
 
@@ -212,7 +213,8 @@ describe("closed market layouts", () => {
     snapshot.pnl.data!.chargesPaise = null;
     snapshot.pnl.data!.reconciliationStatus = "provisional";
     render(<OverviewScreen snapshot={snapshot} />);
-    expect(screen.getByText("Provisional / pending")).toBeInTheDocument();
+    expect(screen.getByText("Open-position P&L subtotal")).toBeInTheDocument();
+    expect(screen.getByText("Partial position coverage")).toBeInTheDocument();
     expect(screen.getByText(/Overnight exposure unverified/)).toBeInTheDocument();
     expect(screen.queryByText("Reconciled", { exact: true })).not.toBeInTheDocument();
   });

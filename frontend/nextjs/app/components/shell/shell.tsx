@@ -11,6 +11,7 @@ import styles from "./shell.module.css";
 import { useClock } from "./use-clock";
 import { ThemeToggle } from "./theme-toggle";
 import { AlphaWire } from "./alpha-wire";
+import { printEodReport } from "@/app/app/overview/export-client";
 
 export interface ShellProps {
   children: ReactNode;
@@ -83,7 +84,7 @@ export function Shell({ children, extraHeaderBar, email, onSignOut }: ShellProps
         <div className={styles.closedSessionBadge}><strong>IST {istLabel}</strong><span>Market closed · post-market reconciliation</span></div>
         <div className={styles.closedClocks}>IST {istLabel}<span>|</span> GST {gstLabel}<span>|</span> NY {estLabel}</div>
         <div className={styles.closedHeaderActions}>
-          <button type="button" disabled title="EOD PDF export is not connected"><span className="material-symbols-outlined" aria-hidden="true">picture_as_pdf</span>Export EOD PDF</button>
+          <button type="button" onClick={printEodReport} title="Open the browser print dialog to save this dashboard as PDF"><span className="material-symbols-outlined" aria-hidden="true">picture_as_pdf</span>Export EOD PDF</button>
           <span className={bhavcopyMatched ? styles.reconciledBadge : styles.pendingBadge}><span className="material-symbols-outlined" aria-hidden="true">{bhavcopyMatched ? "done_all" : "schedule"}</span>{bhavcopyMatched ? "Bhavcopy matched" : "Bhavcopy pending"}</span>
           <Link className={styles.reauthAction} href={`/app/broker-connections${reauthProvider ? `#${reauthProvider}` : ""}`}><span className="material-symbols-outlined" aria-hidden="true">refresh</span>{providerName ? `Re-auth ${providerName}` : "Broker gateways"}</Link>
         </div>
@@ -209,12 +210,12 @@ export function Shell({ children, extraHeaderBar, email, onSignOut }: ShellProps
               <span>Session Risk Cap</span>
               <span className={styles.riskCapValue}>Not set</span>
             </div>
-            <button type="button" className={styles.haltButton} disabled title="Not wired yet">
+            <div className={styles.haltButton} title="No order-entry service is enabled">
               <span className="material-symbols-outlined" aria-hidden="true">
-                warning
+                lock
               </span>
-              Halt new entries
-            </button>
+              Execution locked
+            </div>
           </div>
         </nav>
 
