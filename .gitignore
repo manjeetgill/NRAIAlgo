@@ -13,3 +13,4 @@ coverage/
 .runtime/
 __pycache__/
 *.pyc
+.claude/
