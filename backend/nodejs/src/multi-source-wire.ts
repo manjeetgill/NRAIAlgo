@@ -1,6 +1,6 @@
 import type { AlphaWireItem, AlphaWireSnapshot } from "@nraialgo/contracts";
 import type { Store } from "./database/database.js";
-import { AlphaWire } from "./alpha-wire.js";
+import { AlphaWire, reconcileAlphaWireDuplicates } from "./alpha-wire.js";
 import { providers, type NewsProvider } from "./news-providers.js";
 
 type Status = NonNullable<AlphaWireSnapshot["sources"]>[number];
@@ -25,7 +25,7 @@ export class MultiSourceWire extends AlphaWire {
     const rows = await this.db.transaction(q => q<{ payload: AlphaWireItem }>(`SELECT payload FROM (
       SELECT payload, received_at, ROW_NUMBER() OVER (PARTITION BY payload->>'source'
         ORDER BY COALESCE((payload->>'publishedAt')::timestamptz, received_at) DESC, id DESC) AS rank
-      FROM alpha_wire_items WHERE received_at > now() - interval '30 days'
+      FROM alpha_wire_items WHERE received_at > now() - interval '30 days' AND NOT superseded
     ) ranked WHERE rank <= 25 ORDER BY COALESCE((payload->>'publishedAt')::timestamptz, received_at) DESC LIMIT 200`));
     return { ...base, items: rows.map(r => r.payload), sources: [{ id: "nse", name: "NSE announcements", category: "Announcements", ...base.source }, ...this.states.values()] };
   }
@@ -62,6 +62,7 @@ export class MultiSourceWire extends AlphaWire {
       if (this.stopped) return;
       await this.db.transaction(async q => {
         for (const entry of items) await q("INSERT INTO alpha_wire_items(id,payload,received_at) VALUES($1,$2::jsonb,$3) ON CONFLICT(id) DO NOTHING", [entry.id, JSON.stringify(entry), entry.receivedAt]);
+        await reconcileAlphaWireDuplicates(q);
         await q("DELETE FROM alpha_wire_items WHERE received_at < now() - interval '30 days'");
       });
       state.status = "healthy"; state.lastSuccessAt = now.toISOString();

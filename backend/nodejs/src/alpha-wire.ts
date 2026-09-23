@@ -1,11 +1,34 @@
 import { createHash } from "node:crypto";
 import { SaxesParser } from "saxes";
 import type { AlphaWireItem, AlphaWireSnapshot } from "@nraialgo/contracts";
-import type { Store } from "./database/database.js";
+import type { Query, Store } from "./database/database.js";
 
 // Fixed official endpoint: no caller-controlled URLs, redirects or private-network fetches.
 export const ANNOUNCEMENTS_URL = "https://nsearchives.nseindia.com/content/RSS/Online_announcements.xml";
 const MAX_BYTES = 2_000_000;
+
+// A row's id is a hash of its own display title (see parseAnnouncements/
+// news-providers.ts's item()), so a title-formatting fix mints a new id for
+// an announcement already stored under the old wording; ON CONFLICT DO
+// NOTHING never merges the two. Run after every insert batch so the same
+// underlying announcement (same source, same publish timestamp, same title
+// once formatting/punctuation is stripped) never shows twice going forward,
+// keeping only the most recently received -- and so most likely corrected --
+// version visible. Marks rather than deletes, so it stays reversible.
+export async function reconcileAlphaWireDuplicates(query: Query): Promise<void> {
+  await query(`
+    UPDATE alpha_wire_items SET superseded = true WHERE NOT superseded AND id IN (
+      SELECT id FROM (
+        SELECT id, ROW_NUMBER() OVER (
+          PARTITION BY payload->>'source', payload->>'publishedAt',
+            lower(regexp_replace(payload->>'title', '[^a-z0-9]+', '', 'gi'))
+          ORDER BY received_at DESC, id DESC
+        ) AS rank
+        FROM alpha_wire_items
+      ) ranked WHERE rank > 1
+    )
+  `);
+}
 
 export function safeAnnouncementUrl(value: string): string | null {
   try {
@@ -79,7 +102,7 @@ export class AlphaWire {
   start() { if (!this.timer && !this.polling && !this.closed && this.enabled) void this.poll(); }
   close() { this.closed = true; clearTimeout(this.timer); this.controller?.abort(); this.listeners.clear(); }
   async snapshot(): Promise<AlphaWireSnapshot> {
-    const rows = await this.store.transaction(query => query<{ payload: AlphaWireItem }>("SELECT payload FROM alpha_wire_items ORDER BY COALESCE((payload->>'publishedAt')::timestamptz, received_at) DESC, received_at DESC, id DESC LIMIT 200"));
+    const rows = await this.store.transaction(query => query<{ payload: AlphaWireItem }>("SELECT payload FROM alpha_wire_items WHERE NOT superseded ORDER BY COALESCE((payload->>'publishedAt')::timestamptz, received_at) DESC, received_at DESC, id DESC LIMIT 200"));
     return { items: rows.map(row => row.payload), source: { ...this.source } };
   }
   async poll() {
@@ -107,6 +130,7 @@ export class AlphaWire {
       if (this.closed) return;
       await this.store.transaction(async query => {
         for (const item of items) await query("INSERT INTO alpha_wire_items (id,payload,received_at) VALUES ($1,$2::jsonb,$3) ON CONFLICT (id) DO NOTHING", [item.id, JSON.stringify(item), item.receivedAt]);
+        await reconcileAlphaWireDuplicates(query);
         await query("DELETE FROM alpha_wire_items WHERE received_at < now() - interval '30 days'");
       });
       this.source = { ...this.source, status: "healthy", lastCheckedAt: now.toISOString(), lastSuccessAt: now.toISOString() };

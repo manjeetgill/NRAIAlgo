@@ -6,7 +6,7 @@ import { readLocalPostgresConfiguration } from "./local-database.js";
 import pg from "pg";
 import { databaseTlsOptions } from "../production-config.js";
 
-export const SCHEMA_VERSION = 12;
+export const SCHEMA_VERSION = 13;
 
 type Parameter = string | number | boolean | null;
 export type Query = <T = Record<string, unknown>>(
@@ -258,6 +258,32 @@ export async function runDatabaseMigrations(
       // explicitly replaces them.
       await query("ALTER TABLE session_pnl_history ADD COLUMN coverage_key TEXT");
       await query("INSERT INTO schema_migrations (version) VALUES (12)");
+    }
+    if (!(await query("SELECT version FROM schema_migrations WHERE version=13")).length) {
+      // One-time reconciliation: alpha_wire_items.id is a hash of the item's
+      // own display title, so a title-formatting fix (a dedup-key change, a
+      // display-text correction) mints a new id for an announcement already
+      // stored under the old wording -- the old row never self-heals, since
+      // inserts are ON CONFLICT DO NOTHING. This marks rows that are the
+      // same underlying announcement (same source, same publish timestamp,
+      // same title once formatting/punctuation is stripped) as superseded,
+      // keeping only the most recently received one -- which carries the
+      // current, corrected text -- visible. Marking rather than deleting
+      // keeps the reconciliation reversible and auditable.
+      await query("ALTER TABLE alpha_wire_items ADD COLUMN superseded BOOLEAN NOT NULL DEFAULT false");
+      await query(`
+        UPDATE alpha_wire_items SET superseded = true WHERE id IN (
+          SELECT id FROM (
+            SELECT id, ROW_NUMBER() OVER (
+              PARTITION BY payload->>'source', payload->>'publishedAt',
+                lower(regexp_replace(payload->>'title', '[^a-z0-9]+', '', 'gi'))
+              ORDER BY received_at DESC, id DESC
+            ) AS rank
+            FROM alpha_wire_items
+          ) ranked WHERE rank > 1
+        )
+      `);
+      await query("INSERT INTO schema_migrations (version) VALUES (13)");
     }
     if (options.runtimePassword || options.runtimeRole) {
       if (options.runtimeRole && options.runtimeRole !== "nraialgo_app") throw new Error("Unsupported runtime database role");
